@@ -129,8 +129,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET") return;
   const url = new URL(request.url);
+  if (url.origin === self.location.origin && url.pathname.endsWith("/.netlify/functions/game")) return;
+  if (request.method !== "GET") return;
   if (url.origin !== self.location.origin) return;
 
   const isScript = url.pathname.endsWith(".js");

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071226">
+  <meta name="description" content="Juega OHANA en cooperativo con otra persona.">
+  <title>OHANA · Cooperativo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=ohana-coop-1">
+  <link rel="stylesheet" href="multiplayer.css?v=ohana-coop-1">
+</head>
+<body>
+  <main class="coop-shell">
+    <header class="coop-head"><h1>PROJECT <span>OHANA</span> · COOPERATIVO</h1><a href="./index.html">Volver a World 1</a></header>
+    <section id="entry" class="coop-panel">
+      <h2>Una familia, dos jugadores</h2>
+      <p>Crea una sala y comparte el código. Entrad desde dos dispositivos para preparar la misión juntos.</p>
+      <div class="coop-actions">
+        <article class="coop-card"><h3>Crear sala</h3><p>Abre una sala nueva y comparte el código con tu compañero.</p><button id="create-room" class="coop-button">Crear sala</button></article>
+        <article class="coop-card"><h3>Unirse a una sala</h3><p>Introduce el código que te ha enviado el jugador 1.</p><div class="join-row"><input id="room-input" maxlength="6" aria-label="Código de sala" placeholder="ABC123" autocomplete="off"><button id="join-room" class="coop-button secondary">Unirse</button></div></article>
+      </div>
+      <p id="entry-error" class="coop-error" role="status"></p>
+    </section>
+    <section id="lobby" class="coop-panel" hidden>
+      <h2>Preparad la misión</h2>
+      <p>Comparte este código para que se una el segundo jugador.</p>
+      <div class="room-code"><span id="room-code"></span><button id="copy-code" class="coop-button secondary" type="button">Copiar</button></div>
+      <div id="player-slots" class="player-slots"></div>
+      <h3>Elige tu personaje de OHANA</h3>
+      <div id="character-grid" class="character-grid"></div>
+      <p id="lobby-status" role="status">Esperando al otro jugador…</p>
+      <p id="lobby-error" class="coop-error" role="status"></p>
+    </section>
+    <section id="game-panel" class="coop-panel" hidden>
+      <h2>Isla Hoku · misión cooperativa</h2>
+      <p>Movimiento sincronizado en la misma sala. En este primer bloque podéis encontraros y moveros juntos.</p>
+      <div id="arena-wrap"><div class="arena-hud"><span id="you-label">Jugador 1</span><span>Jugador 2</span></div><canvas id="arena" width="1280" height="720" aria-label="Arena compartida de Isla Hoku"></canvas></div>
+      <div class="arena-controls" aria-label="Controles táctiles"><button class="coop-button secondary" data-move="-1,0">◀</button><button class="coop-button secondary" data-move="0,-1">▲</button><button class="coop-button secondary" data-move="0,1">▼</button><button class="coop-button secondary" data-move="1,0">▶</button></div>
+    </section>
+  </main>
+  <script type="module" src="multiplayer.js?v=ohana-coop-1"></script>
+</body>
+</html>

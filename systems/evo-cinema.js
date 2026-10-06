@@ -345,12 +345,12 @@ export function playEvolution(detail = {}) {
   const color = detail.color || newForm.color || def.color || "#7ee7ff";
   const designAccent = newForm.accent || newForm.color || def.color || color;
   const oldColor = oldForm.color || color;
+  const cinemaProfile = EVOLUTION_CINEMA_PROFILES[def.id] || EVOLUTION_CINEMA_PROFILES.kilo;
   const accent = finalForm ? designAccent : (cinemaProfile.accent || color);
   const light = tint(accent, 0.55);
   const palette = finalForm ? [accent, light, "#ffffff", color] : [color, light, "#ffffff"];
   const toName = String(detail.toName || detail.name || newForm.name || "Nueva forma");
   const title = "¡" + toName.toUpperCase() + "!";
-  const cinemaProfile = EVOLUTION_CINEMA_PROFILES[def.id] || EVOLUTION_CINEMA_PROFILES.kilo;
   const story = EVOLUTION_STAGE_COPY[evo] || EVOLUTION_STAGE_COPY[4] || { kicker: "EVOLUCIÓN" };
   const reduce = reducedMotion();
 

@@ -18,6 +18,10 @@ const improvements = read("IMPROVEMENTS.md");
 const readme = read("README.md");
 const sw = read("sw.js");
 const packageJson = JSON.parse(read("package.json"));
+const multiplayerPage = read("multiplayer.html");
+const multiplayerClient = read("multiplayer.js");
+const multiplayerFunction = read("netlify/functions/game.ts");
+const netlifyConfig = read("netlify.toml");
 
 const activeCharacters = ROSTER.length;
 const formsPerCharacter = activeCharacters ? Math.min(...ROSTER.map((character) => character.forms.length)) : 0;
@@ -95,6 +99,7 @@ if (packageJson.scripts?.test !== "node --test tests/*.js") {
   errors.push("package.json: script test inesperado");
 }
 if (packageJson.scripts?.["test:browser"] !== "node tests/browser/e2e.mjs") errors.push("package.json: falta test:browser esperado");
+if (packageJson.scripts?.["test:browser:multiplayer"] !== "node tests/browser/multiplayer-e2e.mjs") errors.push("package.json: falta test:browser:multiplayer");
 if (packageJson.scripts?.["test:visual"] !== "node tests/browser/visual-regression.mjs") errors.push("package.json: falta test:visual");
 if (packageJson.scripts?.["release:check"] !== "node tools/release-gate.mjs") errors.push("package.json: falta release:check");
 
@@ -124,6 +129,14 @@ if (!fs.existsSync("./systems/objectives.js")) errors.push("falta objectives.js"
 if (!fs.existsSync("./systems/evolution-timing.js")) errors.push("falta evolution-timing.js");
 if (!fs.existsSync("./systems/combat-feedback.js")) errors.push("falta combat-feedback.js");
 
+if (!multiplayerPage.includes('href="./multiplayer.html"') && !index.includes('href="./multiplayer.html"')) errors.push("falta entrada al modo cooperativo desde World 1");
+if (!multiplayerClient.includes('const endpoint = "/.netlify/functions/game"')) errors.push("multiplayer.js debe llamar directamente a /.netlify/functions/game");
+if (/\/api\/game|config\.path/.test(multiplayerClient + multiplayerFunction + netlifyConfig)) errors.push("la función multiplayer no debe usar /api/game ni config.path");
+if (!multiplayerFunction.includes('"cache-control": "no-store, max-age=0"')) errors.push("la función multiplayer debe responder Cache-Control: no-store");
+if (!sw.includes('url.pathname.endsWith("/.netlify/functions/game")')) errors.push("el Service Worker debe excluir explícitamente la función multiplayer");
+if (!netlifyConfig.includes('functions = "netlify/functions"')) errors.push("netlify.toml debe registrar el directorio estándar de Functions");
+if (!fs.existsSync("./netlify/lib/room-service.mjs")) errors.push("la lógica reutilizable de salas debe vivir fuera de netlify/functions");
+
 if (errors.length) {
   console.error("[OHANA] RELEASE GATE FAIL");
   for (const error of errors) console.error(" - " + error);
@@ -135,4 +148,4 @@ console.log(" - cache: " + swVersion);
 console.log(" - " + activeCharacters + " personajes / " + formsPerCharacter + " formas / " + roomCount + " salas");
 console.log(" - " + runtimeFiles.length + " módulos JS runtime precacheados");
 console.log(" - " + referencedAssets.length + " recursos precacheados existentes");
-console.log(" - scripts: test + test:browser + release:check");
+console.log(" - scripts: test + test:browser + test:browser:multiplayer + release:check");
