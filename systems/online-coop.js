@@ -62,6 +62,8 @@ class OnlineCoop {
     this.lastLocalWorld = "";
     this.error = "";
     this.seenSignals = new Set();
+    this.localStateSent = "";
+    this.lastOrbSignals = new Set();
   }
 
   readSession() {
@@ -372,11 +374,56 @@ class OnlineCoop {
       this.seenSignals.add(event.id);
       if (this.seenSignals.size > 128) this.seenSignals.delete(this.seenSignals.values().next().value);
 
+      if (event.signalKind === "state") {
+        const state = String(event.payload?.state || "");
+        if (state === "lost") {
+          this.localStateSent = "lost";
+          try {
+            game.player.dead = true;
+            game.player.health = 0;
+            game.won = false;
+            window.dispatchEvent(new CustomEvent("ohana-online-state", {
+              detail: { state: "lost", senderPlayerId: event.senderPlayerId },
+            }));
+          } catch (_) {}
+        } else if (state === "won") {
+          this.localStateSent = "won";
+          try {
+            window.dispatchEvent(new CustomEvent("ohana-online-state", {
+              detail: { state: "won", senderPlayerId: event.senderPlayerId },
+            }));
+          } catch (_) {}
+        }
+        continue;
+      }
+
+      if (event.signalKind === "orb") {
+        const x = finite(event.payload?.x, NaN);
+        const y = finite(event.payload?.y, NaN);
+        const xp = Math.max(0, finite(event.payload?.xp, 0));
+        const roomKey = String(event.payload?.roomId || game.roomId || "hub");
+        const orbKey = `${roomKey}:${Math.round(x)}:${Math.round(y)}`;
+        this.lastOrbSignals.add(orbKey);
+        if (Number.isFinite(x) && Number.isFinite(y)) {
+          const orb = (game.orbs || []).find((item) => !item.taken && Math.hypot(item.x - x, item.y - y) < 42);
+          if (orb) {
+            orb.taken = true;
+            if (xp > 0 && game.player && !game.player.dead) {
+              game.player.xp = Math.max(0, Number(game.player.xp) || 0) + xp;
+            }
+            game.fx?.emit(orb.x, orb.y, { color: "#ffe66a", count: 12, size: 4, up: 1.8, star: true, life: 18 });
+            game.nums?.add(orb.x, orb.y - 8, "XP", "#ffe66a");
+          }
+        }
+        continue;
+      }
+
       if (event.signalKind === "room") {
         const nextRoom = String(event.payload?.roomId || "");
         if (nextRoom && nextRoom !== game.roomId) {
           try { game.loadRoom(nextRoom, "online-peer"); } catch (_) {}
         }
+        if (nextRoom) this.lastLocalWorld = nextRoom;
         this.remoteWorld = nextRoom || this.remoteWorld;
         continue;
       }
@@ -466,6 +513,33 @@ class OnlineCoop {
   tick(game) {
     if (!this.enabled) return;
     void this.poll(game);
+
+    const localState = game.player?.dead ? "lost" : game.won ? "won" : "";
+    if (!localState && (this.localStateSent === "lost" || this.localStateSent === "won")) {
+      this.localStateSent = "";
+    }
+    if (localState && localState !== this.localStateSent) {
+      this.localStateSent = localState;
+      void this.signal(game, "state", { state: localState });
+    }
+
+    const roomKey = String(game.roomId || "hub");
+    const consumedOrbKeys = new Set(this.lastOrbSignals);
+    for (const orb of game.orbs || []) {
+      if (!orb.taken) continue;
+      const key = `${roomKey}:${Math.round(orb.x)}:${Math.round(orb.y)}`;
+      if (consumedOrbKeys.has(key)) continue;
+      consumedOrbKeys.add(key);
+      void this.signal(game, "orb", {
+        x: orb.x,
+        y: orb.y,
+        xp: 4,
+        roomId: game.roomId || START_ROOM,
+      });
+      if (consumedOrbKeys.size > 128) consumedOrbKeys.delete(consumedOrbKeys.values().next().value);
+    }
+    this.lastOrbSignals = consumedOrbKeys;
+
     if (game.roomId !== this.lastLocalWorld) {
       const firstWorld = !this.lastLocalWorld;
       this.lastLocalWorld = game.roomId;
