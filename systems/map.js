@@ -129,6 +129,11 @@ export const ROOMS = {
   }
 };
 
+const SIGNATURES = {
+  hub: "kilo", beach: "stitcho", jungle: "chispin", cave: "cat", lab: "dragon",
+  ridge: "dino", space: "frita", reef: "pizza", volcano: "yomi", boss: "cuerno"
+};
+
 const SCALE = 1.4;
 const LAYOUT = {
   hub: [[0,1134,2240,126],[180,960,220,22],[460,800,220,22],[860,980,200,22],[1080,820,200,22],[1300,660,200,22],[1520,500,200,22],[1740,340,200,22],[1900,180,220,22]],
@@ -143,6 +148,7 @@ const LAYOUT = {
   boss: [[0,1134,2240,126],[280,900,240,22],[980,720,280,22],[1680,900,240,22]]
 };
 for (const room of Object.values(ROOMS)) {
+  room.signatureCharacter = SIGNATURES[room.id] || "kilo";
   room.plats = LAYOUT[room.id] || room.plats;
   const cast = {
     hub: ["cucaracho", "cucaracho", "phosquito"],
