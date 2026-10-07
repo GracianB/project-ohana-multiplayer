@@ -56,11 +56,11 @@ class OnlineCoop {
     this.lastPoll = 0;
     this.polling = false;
     this.mutationBusy = false;
-    this.pendingPosition = null;
-    this.pendingSignals = [];
+    this.pendingMutations = [];
     this.lastRoomId = "";
     this.lastLocalWorld = "";
     this.error = "";
+    this.pendingMutations = [];
     this.seenSignals = new Set();
     this.localStateSent = "";
     this.lastOrbSignals = new Set();
@@ -222,10 +222,14 @@ class OnlineCoop {
     } else {
       this.remote.targetX = targetX;
       this.remote.targetY = targetY;
+      this.remote.sampleAt = performance.now();
       this.remote.characterId = remote.characterId;
       this.remote.evolution = remote.evolution ?? this.remote.evolution ?? 1;
       this.remote.facing = remote.facing || this.remote.facing || 1;
       this.remote.slot = remote.slot;
+      this.remote.previousX = this.remote.targetX;
+      this.remote.previousY = this.remote.targetY;
+      this.remote.previousSampleAt = this.remote.sampleAt || performance.now();
       this.remote.health = remote.health;
       this.remote.maxHealth = remote.maxHealth;
       this.remote.pose = structuredClone(remote.pose || this.remote.pose || { vx: 0, vy: 0, grounded: true, melee: 0, dash: 0 });
@@ -277,20 +281,34 @@ class OnlineCoop {
     }
   }
 
+  enqueueMutation(body) {
+    if (body.action === "move") {
+      const nonMoves = this.pendingMutations.filter((item) => item.action !== "move");
+      this.pendingMutations = [...nonMoves, body];
+    } else {
+      this.pendingMutations.push(body);
+    }
+    this.pendingMutations.sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+    if (this.pendingMutations.length > 24) {
+      const signals = this.pendingMutations.filter((item) => item.action !== "move");
+      const latestMove = this.pendingMutations.find((item) => item.action === "move");
+      this.pendingMutations = [...signals.slice(-20), ...(latestMove ? [latestMove] : [])].sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+    }
+  }
+
   async sendPosition(game, force = false) {
     if (!this.enabled || !game.player || game.player.dead || !this.roomId || !this.identity) return;
     const now = performance.now();
     if (!force && now - this.lastSend < SEND_INTERVAL_MS) return;
     this.lastSend = now;
-
     const sequence = ++this.sequence;
-    this.pendingPosition = {
+    this.enqueueMutation({
       action: "move",
       roomId: this.roomId,
       identity: this.identity,
       mode: "engine",
       sequence,
-      actionId: makeActionId(this.identity.playerId, sequence),
+      actionId: "online:" + this.identity.playerId + ":" + sequence,
       positionX: finite(game.player.x, 420),
       positionY: finite(game.player.y, 1070),
       facing: game.player.facing || 1,
@@ -304,8 +322,7 @@ class OnlineCoop {
       melee: finite(game.player.melee, 0),
       dash: finite(game.player.dash, 0),
       worldRoomId: game.roomId || START_ROOM,
-    };
-
+    });
     void this.drainMutations(game);
   }
 
@@ -313,12 +330,8 @@ class OnlineCoop {
     if (this.mutationBusy) return;
     this.mutationBusy = true;
     try {
-      while (this.enabled && this.roomId && this.identity && (this.pendingSignals.length || this.pendingPosition)) {
-        const body = this.pendingSignals.length
-          ? this.pendingSignals.shift()
-          : this.pendingPosition;
-        if (!this.pendingSignals.length) this.pendingPosition = null;
-
+      while (this.enabled && this.roomId && this.identity && this.pendingMutations.length) {
+        const body = this.pendingMutations.shift();
         try {
           const data = await post(body);
           if (data) {
@@ -333,38 +346,30 @@ class OnlineCoop {
             location.href = "./multiplayer.html";
             break;
           }
-          // Keep the most recent movement, but never build an unbounded queue.
-          if (body.action === "move") this.pendingPosition = body;
-          else this.pendingSignals.unshift(body);
+          if (body.action !== "move") this.pendingMutations.unshift(body);
           break;
         }
       }
     } finally {
       this.mutationBusy = false;
-      if (this.pendingSignals.length || this.pendingPosition) queueMicrotask(() => this.drainMutations(game));
+      if (this.pendingMutations.length) queueMicrotask(() => this.drainMutations(game));
     }
   }
 
   async signal(game, signalKind, payload = {}) {
     if (!this.enabled || !this.roomId || !this.identity) return;
     const sequence = ++this.sequence;
-    this.pendingPosition = null;
-    this.pendingSignals.push({
+    this.enqueueMutation({
       action: "signal",
       roomId: this.roomId,
       identity: this.identity,
       sequence,
-      actionId: makeActionId(this.identity.playerId, sequence),
+      actionId: "online:" + this.identity.playerId + ":" + sequence,
       signalKind,
-      payload: {
-        ...payload,
-        roomId: game.roomId || START_ROOM,
-      },
+      payload: { ...payload, roomId: game.roomId || START_ROOM },
     });
-    if (this.pendingSignals.length > 12) this.pendingSignals.splice(0, this.pendingSignals.length - 12);
     void this.drainMutations(game);
   }
-
   consumeSignals(game) {
     const events = this.snapshot?.combat?.events || [];
     for (const event of events) {
@@ -555,14 +560,25 @@ class OnlineCoop {
     void this.sendPosition(game);
 
     if (this.remote) {
-      this.remote.x += (this.remote.targetX - this.remote.x) * REMOTE_LERP;
-      this.remote.y += (this.remote.targetY - this.remote.y) * REMOTE_LERP;
+      const now = performance.now();
+      const sampleDt = Math.max(16, Math.min(180, (this.remote.sampleAt || now) - (this.remote.previousSampleAt || now)));
+      const vx = (this.remote.targetX - this.remote.previousX) / sampleDt;
+      const vy = (this.remote.targetY - this.remote.previousY) / sampleDt;
+      const leadX = this.remote.targetX + Math.max(-42, Math.min(42, vx * 54));
+      const leadY = this.remote.targetY + Math.max(-42, Math.min(42, vy * 54));
+      const blend = Math.max(0.16, Math.min(0.36, REMOTE_LERP * (16.67 / sampleDt)));
+      this.remote.x += (leadX - this.remote.x) * blend;
+      this.remote.y += (leadY - this.remote.y) * blend;
+      const pose = this.remote.pose || {};
       this.remote.melee = Math.max(0, this.remote.melee - 1);
       this.remote.dash = Math.max(0, this.remote.dash - 1);
       this.remote.invuln = Math.max(0, this.remote.invuln - 1);
-      const dy = this.remote.targetY - this.remote.y;
-        this.remote.grounded = Math.abs(dy) < 3;
+      this.remote.grounded = pose.grounded !== false;
       this.remote.phase += 0.7;
+      if (this.remote.actionUntil && now > this.remote.actionUntil) {
+        this.remote.actionKind = null;
+        this.remote.abilitySlot = null;
+      }
     }
 
     this.consumeSignals(game);
@@ -618,6 +634,15 @@ class OnlineCoop {
     ctx.lineWidth = 3;
     ctx.strokeText("J2 · " + (definition.name || "Jugador"), player.x + player.w / 2 - game.cam.x, player.y - 10 - game.cam.y);
     ctx.fillText("J" + ((this.remote.slot ?? 1) + 1) + " · " + (definition.name || "Jugador"), player.x + player.w / 2 - game.cam.x, player.y - 10 - game.cam.y);
+    const hp = Math.max(0, finite(this.remote.health, this.remote.maxHealth || 1));
+    const maxHp = Math.max(1, finite(this.remote.maxHealth, 1));
+    const barW = 58;
+    const barX = player.x + player.w / 2 - barW / 2 - game.cam.x;
+    const barY = player.y - 23 - game.cam.y;
+    ctx.fillStyle = "rgba(3,8,16,.78)";
+    ctx.fillRect(barX, barY, barW, 5);
+    ctx.fillStyle = hp / maxHp > .45 ? "#7ee7a7" : "#ff8b8b";
+    ctx.fillRect(barX, barY, barW * Math.max(0, Math.min(1, hp / maxHp)), 5);
     ctx.restore();
   }
 }
