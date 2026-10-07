@@ -1,4 +1,5 @@
 import { ROSTER, applyForm } from "../characters/roster.js";
+import { paintFit } from "../characters/look.js";
 import { drawCharacter } from "../characters/draw.js";
 
 const ENDPOINT = "/.netlify/functions/game";
@@ -397,9 +398,13 @@ class OnlineCoop {
         this.applyRemoteHit(game, event.payload);
       }
 
-      if (event.signalKind === "hurt" && game.player && event.payload?.targetPlayerId === this.identity.playerId) {
-        const amount = Math.max(0, finite(event.payload.amount, 0));
-        if (amount > 0) this.applyRemoteHurt(game, amount);
+      if (event.signalKind === "hurt") {
+        const targetPlayerId = event.payload?.targetPlayerId;
+        const health = Number(event.payload?.health);
+        if (targetPlayerId && targetPlayerId !== this.identity?.playerId && this.remote?.playerId === targetPlayerId) {
+          this.remote.invuln = Math.max(this.remote.invuln || 0, 24);
+          if (Number.isFinite(health)) this.remote.health = Math.max(0, health);
+        }
       }
     }
   }
