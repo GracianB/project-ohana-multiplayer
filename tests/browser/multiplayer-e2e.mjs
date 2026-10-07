@@ -32,7 +32,9 @@ async function installFakeNetlify(context) {
         case "create": data = host = await service.create(); roomId = data.roomId; break;
         case "join": data = await service.join(body.roomId, body.identity); break;
         case "choose": data = await service.choose(body.roomId, body.identity, body.characterId); break;
+        case "ready": data = await service.ready(body.roomId, body.identity, body.ready); break;
         case "move": data = await service.move(body.roomId, body.identity, body); break;
+        case "signal": data = await service.signal(body.roomId, body.identity, body); break;
         case "poll": data = await service.poll(body.roomId, body.identity); break;
         case "disconnect": data = await service.disconnect(body.roomId, body.identity); break;
         default: throw new RoomError("UNKNOWN_ACTION", "Acción desconocida.");
@@ -58,21 +60,41 @@ try {
   await hostPage.getByRole("button", { name: "Crear sala" }).click();
   await hostPage.locator("#room-code").waitFor();
   roomId = await hostPage.locator("#room-code").innerText();
-  await hostPage.getByRole("button", { name: "Elegir Kilo" }).click();
+  await hostPage.getByRole("button", { name: "Kilo", exact: true }).click();
+  await hostPage.getByRole("button", { name: "Confirmar personaje" }).click();
 
   await guestPage.goto("http://127.0.0.1:4174/multiplayer.html");
   await guestPage.locator("#room-input").fill(roomId);
   await guestPage.getByRole("button", { name: "Unirse" }).click();
-  await guestPage.getByRole("button", { name: "Elegir Michi" }).click();
-  await hostPage.locator("#game-panel").waitFor({ state: "visible", timeout: 5000 });
-  await guestPage.locator("#game-panel").waitFor({ state: "visible", timeout: 5000 });
+  await guestPage.getByRole("button", { name: "Michi", exact: true }).click();
+  await guestPage.getByRole("button", { name: "Confirmar personaje" }).click();
+
+  await hostPage.waitForURL(/index\.html\?online=1/, { timeout: 7000 });
+  await guestPage.waitForURL(/index\.html\?online=1/, { timeout: 7000 });
+
+  await hostPage.locator("#game").waitFor({ state: "visible", timeout: 5000 });
+  await guestPage.locator("#game").waitFor({ state: "visible", timeout: 5000 });
+  await hostPage.locator("#online-peer-badge").waitFor({ state: "visible", timeout: 7000 });
+  await guestPage.locator("#online-peer-badge").waitFor({ state: "visible", timeout: 7000 });
+
+  assert.equal(await hostPage.locator("body").getAttribute("data-game-mode"), "online");
+  assert.equal(await guestPage.locator("body").getAttribute("data-game-mode"), "online");
+
   await hostPage.keyboard.down("ArrowRight");
-  await hostPage.waitForTimeout(800);
+  await hostPage.waitForTimeout(900);
   await hostPage.keyboard.up("ArrowRight");
+  await guestPage.waitForTimeout(500);
+
   const moved = await service.poll(roomId, host.identity);
-  assert.ok(moved.players.find((player) => player.isYou).x > 390, "el servidor compartido debe mover al jugador host");
+  const hostState = moved.players.find((player) => player.playerId === host.identity.playerId);
+  const guestView = await service.poll(roomId, host.identity);
+  assert.ok(hostState.x > 420, "el motor original online debe mover al jugador host dentro del mundo de 2240px");
+
+  await hostPage.keyboard.press("h");
+  await hostPage.waitForTimeout(300);
+
   assert.deepEqual(errors, [], "las dos vistas deben renderizar sin errores");
-  console.log("PASS · dos contextos independientes crean/unen sala, eligen a Kilo y Michi, entran juntos y sincronizan movimiento.");
+  console.log("PASS · dos contextos reales entran al motor original de OHANA, sincronizan posición y ejecutan combate online.");
 } finally {
   for (const context of contexts) await context.close();
   await browser.close();
