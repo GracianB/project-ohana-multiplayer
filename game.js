@@ -857,6 +857,7 @@ function markHit(p, e, dmg, kb) {
   addPlayerXp(p, 1);
   void onlineCoop.signal(game, "hit", {
     characterId: p.id,
+    targetId: e.id,
     kind: e.kind,
     x: e.x,
     y: e.y,
