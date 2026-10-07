@@ -7,7 +7,7 @@ const SRC = {
   boss: "assets/worlds/boss-bg.jpg",
 };
 const cache = new Map();
-export function paintedRoomOn(roomId) { return getLook() === "paint" && !!SRC[roomId]; }
+export function paintedRoomOn(roomId) { return false; }
 function img(id) {
   const src = SRC[id];
   if (!src) return null;
@@ -20,7 +20,8 @@ function img(id) {
   return null;
 }
 export function drawPaintedRoom(ctx, roomId, W, H) {
-  if (getLook() !== "paint") return false;
+  return false;
+  /*
   const el = img(roomId);
   if (!el) return false;
   const scale = Math.max(W / el.naturalWidth, H / el.naturalHeight);
@@ -33,4 +34,5 @@ export function drawPaintedRoom(ctx, roomId, W, H) {
   ctx.fillStyle = shade;
   ctx.fillRect(0, H * 0.55, W, H * 0.45);
   return true;
+  */ 
 }
