@@ -55,6 +55,7 @@ function snapshot(room, viewerId) {
       worldRoomId: player.worldRoomId || "hub",
     })),
     combat: room.combat ? structuredClone(room.combat) : null,
+    engineMode: !!room.engineMode,
     updatedAt: room.updatedAt,
   };
 }
@@ -231,6 +232,7 @@ export function createRoomService(store, options = {}) {
         player.lastSeenAt = now();
         if (state.players.length === 2 && state.players.every((entry) => entry.connected && entry.characterId && entry.ready)) {
           state.phase = "playing";
+          for (const entry of state.players) entry.worldRoomId = entry.worldRoomId || "beach";
           state.combat ||= createCombat(state.players, now());
         }
       });
