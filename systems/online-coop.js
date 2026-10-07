@@ -51,6 +51,7 @@ class OnlineCoop {
     this.sending = false;
     this.lastRoomId = "";
     this.error = "";
+    this.seenSignals = new Set();
   }
 
   readSession() {
@@ -151,6 +152,7 @@ class OnlineCoop {
         melee: 0,
         dash: 0,
         invuln: 0,
+        slot: remote.slot,
         phase: Math.random() * 100,
       };
     } else {
@@ -159,6 +161,7 @@ class OnlineCoop {
       this.remote.characterId = remote.characterId;
       this.remote.evolution = remote.evolution ?? this.remote.evolution ?? 1;
       this.remote.facing = remote.facing || this.remote.facing || 1;
+      this.remote.slot = remote.slot;
     }
 
     this.remoteWorld = worldRoom;
@@ -271,9 +274,10 @@ class OnlineCoop {
     const events = this.snapshot?.combat?.events || [];
     for (const event of events) {
       if (event.kind !== "online-signal" || event.senderPlayerId === this.identity?.playerId) continue;
-      if (event.roomId !== game.roomId) continue;
-      if (event._consumedBy?.includes?.(this.identity.playerId)) continue;
-      event._consumedBy = [...(event._consumedBy || []), this.identity.playerId];
+      if (event.payload?.roomId !== game.roomId) continue;
+      if (this.seenSignals.has(event.id)) continue;
+      this.seenSignals.add(event.id);
+      if (this.seenSignals.size > 128) this.seenSignals.delete(this.seenSignals.values().next().value);
 
       if (event.signalKind === "action") {
         const action = event.payload?.action;
@@ -395,7 +399,7 @@ class OnlineCoop {
     ctx.strokeStyle = "rgba(4,8,16,.84)";
     ctx.lineWidth = 3;
     ctx.strokeText("J2 · " + (definition.name || "Jugador"), player.x + player.w / 2 - game.cam.x, player.y - 10 - game.cam.y);
-    ctx.fillText("J2 · " + (definition.name || "Jugador"), player.x + player.w / 2 - game.cam.x, player.y - 10 - game.cam.y);
+    ctx.fillText("J" + ((this.remote.slot ?? 1) + 1) + " · " + (definition.name || "Jugador"), player.x + player.w / 2 - game.cam.x, player.y - 10 - game.cam.y);
     ctx.restore();
   }
 }
