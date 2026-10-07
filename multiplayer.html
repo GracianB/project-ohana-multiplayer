@@ -4,43 +4,118 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#071226">
-  <meta name="description" content="Juega OHANA en cooperativo con otra persona.">
-  <title>OHANA · Cooperativo</title>
+  <meta name="description" content="Recorre World 1 de OHANA en una misión cooperativa para dos jugadores.">
+  <title>OHANA · Misión cooperativa</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=ohana-coop-1">
-  <link rel="stylesheet" href="multiplayer.css?v=ohana-coop-1">
+  <link rel="stylesheet" href="style.css?v=ohana-coop-3">
+  <link rel="stylesheet" href="multiplayer.css?v=ohana-coop-3">
 </head>
 <body>
   <main class="coop-shell">
-    <header class="coop-head"><h1>PROJECT <span>OHANA</span> · COOPERATIVO</h1><a href="./index.html">Volver a World 1</a></header>
-    <section id="entry" class="coop-panel">
-      <h2>Una familia, dos jugadores</h2>
-      <p>Crea una sala y comparte el código. Entrad desde dos dispositivos para preparar la misión juntos.</p>
+    <header class="coop-head">
+      <h1>PROJECT <span>OHANA</span> · WORLD 1 COOPERATIVO</h1>
+      <a href="./index.html">Volver a OHANA</a>
+    </header>
+
+    <section id="entry" class="coop-panel entry-panel">
+      <p class="eyebrow">DOS JUGADORES · UNA MISMA MISIÓN</p>
+      <h2>La familia se abre camino</h2>
+      <p>Entrad desde dos dispositivos, elegid quiénes sois y recorred la Costa Hoku, la Jungla Alta y la Caldera antes de enfrentaros a la Reina del Nido.</p>
+      <div class="campaign-teaser" aria-label="Recorrido de la misión">
+        <span>Costa Hoku</span><i aria-hidden="true">→</i><span>Jungla Alta</span><i aria-hidden="true">→</i><span>Caldera</span><i aria-hidden="true">→</i><span>Nido</span><i aria-hidden="true">→</i><strong>Reina del Nido</strong>
+      </div>
       <div class="coop-actions">
-        <article class="coop-card"><h3>Crear sala</h3><p>Abre una sala nueva y comparte el código con tu compañero.</p><button id="create-room" class="coop-button">Crear sala</button></article>
-        <article class="coop-card"><h3>Unirse a una sala</h3><p>Introduce el código que te ha enviado el jugador 1.</p><div class="join-row"><input id="room-input" maxlength="6" aria-label="Código de sala" placeholder="ABC123" autocomplete="off"><button id="join-room" class="coop-button secondary">Unirse</button></div></article>
+        <article class="coop-card">
+          <h3>Crear una sala</h3>
+          <p>Abre una misión y comparte el código con la otra persona.</p>
+          <button id="create-room" class="coop-button" type="button">Crear sala</button>
+        </article>
+        <article class="coop-card">
+          <h3>Unirse a una sala</h3>
+          <p>Introduce el código del jugador que ha creado la sala.</p>
+          <div class="join-row">
+            <input id="room-input" maxlength="6" aria-label="Código de sala" placeholder="ABC123" autocomplete="off">
+            <button id="join-room" class="coop-button secondary" type="button">Unirse</button>
+          </div>
+        </article>
       </div>
       <p id="entry-error" class="coop-error" role="status"></p>
     </section>
+
     <section id="lobby" class="coop-panel" hidden>
-      <h2>Preparad la misión</h2>
-      <p>Comparte este código para que se una el segundo jugador.</p>
-      <div class="room-code"><span id="room-code"></span><button id="copy-code" class="coop-button secondary" type="button">Copiar</button></div>
-      <div id="player-slots" class="player-slots"></div>
-      <h3>Elige tu personaje de OHANA</h3>
-      <div id="character-grid" class="character-grid"></div>
-      <p id="lobby-status" role="status">Esperando al otro jugador…</p>
+      <p class="eyebrow">ANTES DE PARTIR</p>
+      <h2>Elegid vuestra forma</h2>
+      <p>La cuadrícula muestra el elenco dibujado de OHANA. Cada persona elige y confirma su personaje cuando esté preparada.</p>
+      <div class="room-row">
+        <div>
+          <span class="sub-label">CÓDIGO DE SALA</span>
+          <div class="room-code"><span id="room-code"></span><button id="copy-code" class="coop-button secondary" type="button">Copiar</button></div>
+        </div>
+        <div id="player-slots" class="player-slots"></div>
+      </div>
+      <div class="roster-layout">
+        <div>
+          <h3>Personajes de OHANA</h3>
+          <div id="character-grid" class="character-grid"></div>
+        </div>
+        <aside class="selection-preview" aria-live="polite">
+          <canvas id="lobby-portrait" width="160" height="160" aria-hidden="true"></canvas>
+          <h3 id="lobby-character-name">Elige tu personaje</h3>
+          <p id="lobby-character-detail">El elenco y sus formas vienen del OHANA original.</p>
+          <button id="confirm-character" class="coop-button" type="button" disabled>Confirmar personaje</button>
+        </aside>
+      </div>
+      <p id="lobby-status" role="status">Esperando a los dos jugadores.</p>
       <p id="lobby-error" class="coop-error" role="status"></p>
     </section>
+
     <section id="game-panel" class="coop-panel" hidden>
-      <h2>Isla Hoku · misión cooperativa</h2>
-      <p>Movimiento sincronizado en la misma sala. En este primer bloque podéis encontraros y moveros juntos.</p>
-      <div id="arena-wrap"><div class="arena-hud"><span id="you-label">Jugador 1</span><span>Jugador 2</span></div><canvas id="arena" width="1280" height="720" aria-label="Arena compartida de Isla Hoku"></canvas></div>
-      <div class="arena-controls" aria-label="Controles táctiles"><button class="coop-button secondary" data-move="-1,0">◀</button><button class="coop-button secondary" data-move="0,-1">▲</button><button class="coop-button secondary" data-move="0,1">▼</button><button class="coop-button secondary" data-move="1,0">▶</button></div>
+      <div class="mission-title-row">
+        <div>
+          <p class="eyebrow">MISIÓN COOPERATIVA</p>
+          <h2 id="mission-heading">Costa Hoku · La ruta de la familia</h2>
+        </div>
+        <span id="campaign-counter" class="campaign-counter">Sala 1 de 5</span>
+      </div>
+      <div class="combat-hud">
+        <div id="enemy-health-panel" class="objective-panel">
+          <strong>ENCUENTRO</strong>
+          <div class="objective-mark" aria-hidden="true"><span>✦</span><span>✦</span><span>✦</span></div>
+          <small id="enemy-health-text">Enemigos en la sala</small>
+        </div>
+        <div id="boss-panel" class="boss-panel" hidden>
+          <strong>REINA DEL NIDO</strong>
+          <div class="boss-health"><span id="boss-health-fill"></span></div>
+          <small id="boss-health-text">1800 / 1800 · Fase 1</small>
+        </div>
+        <div id="team-health" class="team-health"></div>
+      </div>
+      <p id="combat-status" class="combat-status" role="status">La introducción comienza cuando los dos estén preparados.</p>
+      <div id="arena-wrap">
+        <div class="arena-hud"><span id="you-label">Jugador</span><span>CAMPAÑA · WORLD 1</span></div>
+        <canvas id="arena" width="1280" height="720" aria-label="Aventura cooperativa de OHANA. El canvas muestra jugadores, enemigos, ataques, escenarios y cinemáticas."></canvas>
+      </div>
+      <div class="arena-controls" aria-label="Controles del juego">
+        <div class="dpad" aria-label="Movimiento táctil">
+          <button class="coop-button secondary" data-move="-1,0" aria-label="Mover a la izquierda" type="button">←</button>
+          <button class="coop-button secondary" data-move="0,-1" aria-label="Mover arriba" type="button">↑</button>
+          <button class="coop-button secondary" data-move="0,1" aria-label="Mover abajo" type="button">↓</button>
+          <button class="coop-button secondary" data-move="1,0" aria-label="Mover a la derecha" type="button">→</button>
+        </div>
+        <button id="touch-attack" class="coop-button" type="button">Golpe · H</button>
+        <button id="touch-dodge" class="coop-button secondary" type="button">Esquiva · Shift</button>
+        <button class="coop-button secondary" data-ability="0" type="button">J</button>
+        <button class="coop-button secondary" data-ability="1" type="button">K</button>
+        <button class="coop-button secondary" data-ability="2" type="button">L</button>
+      </div>
+      <p class="control-hint">Mantén pulsada una flecha para moverte. Teclado: WASD o flechas · Golpe: H · Esquiva: Shift · Habilidades: J, K y L · Salid de las marcas rojas.</p>
+      <div id="ending-actions" class="ending-actions" hidden>
+        <button id="return-home" class="coop-button secondary" type="button">Volver al menú de OHANA</button>
+      </div>
     </section>
   </main>
-  <script type="module" src="multiplayer.js?v=ohana-coop-1"></script>
+  <script type="module" src="multiplayer.js?v=ohana-coop-3"></script>
 </body>
 </html>

@@ -1,8 +1,12 @@
-const VERSION = "ohana-221";
+const VERSION = "ohana-223";
 const CACHE = "ohana-static-" + VERSION;
 const PRECACHE = [
   "./",
   "./index.html",
+  "./multiplayer.html?v=" + VERSION,
+  "./multiplayer.css?v=" + VERSION,
+  "./multiplayer.js?v=" + VERSION,
+    './multiplayer/mission.js',
   "./manifest.json",
   "./favicon.svg",
   "./style.css?v=" + VERSION,

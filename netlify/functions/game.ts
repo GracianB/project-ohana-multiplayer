@@ -25,7 +25,11 @@ export default async function handler(request: Request) {
       case "create": data = await service.create(); break;
       case "join": data = await service.join(body.roomId, body.identity); break;
       case "choose": data = await service.choose(body.roomId, body.identity, body.characterId); break;
+      case "ready": data = await service.ready(body.roomId, body.identity, body.ready); break;
       case "move": data = await service.move(body.roomId, body.identity, body); break;
+      case "attack": data = await service.action(body.roomId, body.identity, body, "attack"); break;
+      case "ability": data = await service.action(body.roomId, body.identity, body, "ability"); break;
+      case "dodge": data = await service.action(body.roomId, body.identity, body, "dodge"); break;
       case "poll": data = await service.poll(body.roomId, body.identity); break;
       case "disconnect": data = await service.disconnect(body.roomId, body.identity); break;
       default: return respond({ error: { code: "UNKNOWN_ACTION", message: "Acción desconocida." } }, 400);

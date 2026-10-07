@@ -1,5 +1,11 @@
+import { advanceCombat, createCombat, moveCombatPlayer, resolveCombatAction } from "./combat.mjs";
+
 const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_RETRIES = 4;
+const MOVE_MIN_INTERVAL_MS = 240;
+const PLAYER_HEARTBEAT_MS = 4_000;
+const PLAYER_STALE_MS = 15_000;
+const ACTION_HISTORY_LIMIT = 128;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export class RoomError extends Error {
@@ -37,10 +43,17 @@ function snapshot(room, viewerId) {
       facing: player.facing,
       lastSequence: player.lastSequence,
       connected: player.connected,
-      ready: !!player.characterId,
+      ready: !!player.ready,
+      evolution: player.evolution ?? null,
+      experience: player.experience ?? 0,
+      combo: player.combo ?? 0,
       isYou: player.id === viewerId,
+      health: player.health ?? null,
+      maxHealth: player.maxHealth ?? null,
+      dodgeUntil: player.dodgeUntil ?? 0,
       name: player.slot === 0 ? "Jugador 1" : "Jugador 2",
     })),
+    combat: room.combat ? structuredClone(room.combat) : null,
     updatedAt: room.updatedAt,
   };
 }
@@ -48,6 +61,49 @@ function snapshot(room, viewerId) {
 function validateCharacter(characterId) {
   const allowed = new Set(["kilo", "stitcho", "chispin", "cat", "dragon", "dino", "frita", "pizza", "yomi", "cuerno"]);
   if (!allowed.has(characterId)) throw new RoomError("INVALID_CHARACTER", "Elige un personaje de OHANA.");
+}
+
+function hasAction(player, actionId) {
+  return player.actions.some((entry) => typeof entry === "string" ? entry === actionId : entry?.id === actionId);
+}
+
+function expireStalePlayers(room, now) {
+  let changed = false;
+  for (const player of room.players) {
+    const lastSeen = Number(player.lastSeenAt ?? player.lastMoveAt ?? room.updatedAt ?? 0);
+    if (player.connected && now - lastSeen > PLAYER_STALE_MS) {
+      player.connected = false;
+      changed = true;
+    }
+  }
+  if (changed && room.phase === "playing") {
+    room.phase = "lobby";
+    if (room.combat && room.combat.pausedAt == null) room.combat.pausedAt = now;
+  }
+  return changed;
+}
+
+function resumeCombat(room, now) {
+  const combat = room.combat;
+  if (!combat || combat.pausedAt == null) return;
+  const pausedFor = Math.max(0, now - combat.pausedAt);
+  const shift = (object, key) => {
+    if (Number.isFinite(object?.[key]) && object[key] > 0) object[key] += pausedFor;
+  };
+  shift(combat.scene, "startedAt");
+  shift(combat.campaign, "stageStartedAt");
+  for (const enemy of combat.enemies || []) {
+    shift(enemy, "nextAttackAt");
+    shift(enemy, "modeUntil");
+  }
+  shift(combat.boss, "attackAt");
+  shift(combat.boss, "modeUntil");
+  shift(combat, "lastTeamHitAt");
+  for (const player of room.players) {
+    shift(player, "lastComboAt");
+    for (const ability of Object.keys(player.cooldowns || {})) shift(player.cooldowns, ability);
+  }
+  combat.pausedAt = null;
 }
 
 export function createRoomService(store, options = {}) {
@@ -68,12 +124,21 @@ export function createRoomService(store, options = {}) {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const current = await read(codeValue);
       const next = structuredClone(current.room);
+      const before = JSON.stringify(next);
+      const timestamp = now();
+      expireStalePlayers(next, timestamp);
+      advanceCombat(next, timestamp);
       const result = transform(next);
+      if (JSON.stringify(next) === before) return { room: current.room, result };
       next.revision += 1;
       next.tick += 1;
       next.updatedAt = now();
       const write = await store.setJSON(current.key, next, { onlyIfMatch: current.etag });
       if (write.modified) return { room: next, result };
+      if (attempt < MAX_RETRIES - 1) {
+        const backoff = Math.min(120, 18 * (2 ** attempt) + Math.random() * 28);
+        await new Promise((resolve) => setTimeout(resolve, backoff));
+      }
     }
     throw new RoomError("ROOM_BUSY", "La sala está recibiendo muchas acciones. Inténtalo otra vez.", 409);
   }
@@ -82,6 +147,9 @@ export function createRoomService(store, options = {}) {
     const player = room.players.find((entry) => entry.id === identity?.playerId);
     if (!player || !identity?.token || player.token !== identity.token) {
       throw new RoomError("INVALID_SESSION", "La sesión no es válida. Vuelve a entrar en la sala.", 401);
+    }
+    if (identity.connectionEpoch !== undefined && Number(identity.connectionEpoch) !== Number(player.connectionEpoch)) {
+      throw new RoomError("STALE_SESSION", "Esta sesión se reanudó en otra pestaña o dispositivo.", 409);
     }
     return player;
   }
@@ -97,10 +165,10 @@ export function createRoomService(store, options = {}) {
           tick: 0,
           createdAt: now(),
           updatedAt: now(),
-          players: [{ id: crypto.randomUUID(), token: credential(), slot: 0, characterId: "", x: 390, y: 572, facing: 1, connected: true, lastSequence: 0, lastMoveAt: now(), actions: [] }],
+          players: [{ id: crypto.randomUUID(), token: credential(), connectionEpoch: 1, slot: 0, characterId: "", ready: false, x: 390, y: 572, facing: 1, connected: true, lastSequence: 0, lastMoveAt: now(), lastSeenAt: now(), dodgeUntil: 0, actions: [] }],
         };
         const write = await store.setJSON(`room:${roomCode}`, room, { onlyIfNew: true });
-        if (write.modified) return { ...snapshot(room, room.players[0].id), identity: { playerId: room.players[0].id, token: room.players[0].token } };
+        if (write.modified) return { ...snapshot(room, room.players[0].id), identity: { playerId: room.players[0].id, token: room.players[0].token, connectionEpoch: 1 } };
       }
       throw new RoomError("ROOM_BUSY", "No se pudo crear una sala ahora. Inténtalo otra vez.", 503);
     },
@@ -112,22 +180,29 @@ export function createRoomService(store, options = {}) {
       const { room } = await mutate(roomCode, (state) => {
         const resume = state.players.find((player) => player.id === identity.playerId && player.token === identity.token);
         if (resume) {
+          resume.connectionEpoch = (resume.connectionEpoch || 0) + 1;
           resume.connected = true;
           resume.lastMoveAt = now();
+          resume.lastSeenAt = now();
         } else {
           if (identity.playerId) throw new RoomError("INVALID_SESSION", "La sesión no se puede reanudar.", 401);
           if (state.players.length >= 2) throw new RoomError("ROOM_FULL", "La sala ya tiene dos jugadores.", 409);
           identity.playerId = crypto.randomUUID();
           identity.token = credential();
-          state.players.push({ id: identity.playerId, token: identity.token, slot: 1, characterId: "", x: 880, y: 572, facing: -1, connected: true, lastSequence: 0, lastMoveAt: now(), actions: [] });
+          state.players.push({ id: identity.playerId, token: identity.token, connectionEpoch: 1, slot: 1, characterId: "", ready: false, x: 880, y: 572, facing: -1, connected: true, lastSequence: 0, lastMoveAt: now(), lastSeenAt: now(), dodgeUntil: 0, actions: [] });
         }
-        if (state.players.length === 2 && state.players.every((player) => player.connected && player.characterId)) state.phase = "playing";
+        if (state.players.length === 2 && state.players.every((player) => player.connected && player.characterId && player.ready)) {
+          resumeCombat(state, now());
+          state.phase = "playing";
+          state.combat ||= createCombat(state.players, now());
+        }
       });
       const joined = room.players.find((player) => player.id === identity.playerId);
       if (!joined) {
         // mutate persists only successful transforms; throw before a room is claimed by a third participant.
         throw new RoomError("ROOM_FULL", "La sala ya tiene dos jugadores.", 409);
       }
+      identity.connectionEpoch = joined.connectionEpoch;
       return { ...snapshot(room, joined.id), identity };
     },
 
@@ -136,8 +211,27 @@ export function createRoomService(store, options = {}) {
       const { room } = await mutate(roomCode, (state) => {
         const player = playerFrom(state, identity);
         if (!player.connected) throw new RoomError("DISCONNECTED", "Reconecta la sesión antes de elegir.", 409);
+        if (state.phase !== "lobby") throw new RoomError("MATCH_STARTED", "No se puede cambiar de personaje una vez iniciada la misión.", 409);
         player.characterId = characterId;
-        if (state.players.length === 2 && state.players.every((entry) => entry.connected && entry.characterId)) state.phase = "playing";
+        player.ready = false;
+        player.lastSeenAt = now();
+      });
+      return snapshot(room, identity.playerId);
+    },
+
+    async ready(roomCode, identity, requestedReady = true) {
+      if (typeof requestedReady !== "boolean") throw new RoomError("INVALID_READY_STATE", "El estado de preparación no es válido.");
+      const { room } = await mutate(roomCode, (state) => {
+        const player = playerFrom(state, identity);
+        if (!player.connected) throw new RoomError("DISCONNECTED", "Reconecta la sesión antes de prepararte.", 409);
+        if (state.phase !== "lobby") throw new RoomError("MATCH_STARTED", "La misión ya ha empezado.", 409);
+        if (!player.characterId) throw new RoomError("CHARACTER_REQUIRED", "Elige primero un personaje.");
+        player.ready = requestedReady;
+        player.lastSeenAt = now();
+        if (state.players.length === 2 && state.players.every((entry) => entry.connected && entry.characterId && entry.ready)) {
+          state.phase = "playing";
+          state.combat ||= createCombat(state.players, now());
+        }
       });
       return snapshot(room, identity.playerId);
     },
@@ -145,36 +239,96 @@ export function createRoomService(store, options = {}) {
     async move(roomCode, identity, payload) {
       const seq = Number(payload?.sequence);
       if (!Number.isSafeInteger(seq) || seq < 1) throw new RoomError("INVALID_SEQUENCE", "La acción de movimiento no es válida.");
-      const x = Math.max(-1, Math.min(1, Number(payload?.x) || 0));
-      const y = Math.max(-1, Math.min(1, Number(payload?.y) || 0));
+      const actionId = String(payload?.actionId || `${identity?.playerId || "player"}:${seq}`);
+      if (actionId.length > 96) throw new RoomError("INVALID_ACTION_ID", "La acción de movimiento no es válida.");
+      let x = Math.max(-1, Math.min(1, Number(payload?.x) || 0));
+      let y = Math.max(-1, Math.min(1, Number(payload?.y) || 0));
+      const directionLength = Math.hypot(x, y) || 1;
+      x /= directionLength;
+      y /= directionLength;
       const { room, result } = await mutate(roomCode, (state) => {
         const player = playerFrom(state, identity);
         if (!player.connected) throw new RoomError("DISCONNECTED", "Reconecta la sesión antes de moverte.", 409);
-        if (seq <= player.lastSequence || player.actions.includes(payload.actionId)) throw new RoomError("DUPLICATE_ACTION", "Esta acción ya se recibió.", 409);
+        const previous = player.actions.find((entry) => typeof entry === "object" && entry?.id === actionId);
+        if (previous) {
+          if (previous.sequence !== seq) throw new RoomError("DUPLICATE_ACTION", "El identificador ya pertenece a otra acción.", 409);
+          return { accepted: !!previous.result?.accepted, cinematic: !!previous.result?.cinematic, replayed: true };
+        }
+        if (hasAction(player, actionId)) return { accepted: true, cinematic: false, replayed: true };
+        if (seq <= player.lastSequence) throw new RoomError("DUPLICATE_ACTION", "Esta acción ya se recibió.", 409);
         if (state.phase !== "playing") throw new RoomError("NOT_READY", "Ambos jugadores deben elegir personaje.", 409);
-        const elapsed = Math.max(0, Math.min(0.15, (now() - player.lastMoveAt) / 1000));
-        const speed = 250;
-        player.x = Math.max(48, Math.min(1232, player.x + x * speed * elapsed));
-        player.y = Math.max(450, Math.min(572, player.y + y * speed * elapsed));
-        if (x) player.facing = Math.sign(x);
-        player.lastMoveAt = now();
+        const currentTime = now();
+        if (currentTime - player.lastMoveAt < MOVE_MIN_INTERVAL_MS) return { accepted: false, throttled: true };
+        const moved = moveCombatPlayer(state, player, x, y, currentTime);
+        if (!moved) return { accepted: false, cinematic: true };
         player.lastSequence = seq;
-        player.actions = [...player.actions.slice(-31), String(payload.actionId || `${player.id}:${seq}`)];
-        return { accepted: true };
+        player.lastSeenAt = currentTime;
+        const moveResult = { accepted: true, cinematic: false };
+        player.actions = [...player.actions.slice(-(ACTION_HISTORY_LIMIT - 1)), { id: actionId, sequence: seq, result: moveResult }];
+        return { ...moveResult, replayed: false };
       });
-      return { ...snapshot(room, identity.playerId), accepted: result.accepted };
+      return { ...snapshot(room, identity.playerId), accepted: result.accepted, cinematic: !!result.cinematic, replayed: !!result.replayed };
+    },
+
+    async action(roomCode, identity, payload, kind) {
+      const seq = Number(payload?.sequence);
+      if (!Number.isSafeInteger(seq) || seq < 1) throw new RoomError("INVALID_SEQUENCE", "La acción no es válida.");
+      const actionId = String(payload?.actionId || "");
+      if (!actionId || actionId.length > 96) throw new RoomError("INVALID_ACTION_ID", "La acción no es válida.");
+      const { room, result } = await mutate(roomCode, (state) => {
+        const player = playerFrom(state, identity);
+        if (!player.connected) throw new RoomError("DISCONNECTED", "Reconecta la sesión antes de actuar.", 409);
+        const previous = player.actions.find((entry) => typeof entry === "object" && entry?.id === actionId);
+        if (previous) {
+          if (previous.sequence !== seq) throw new RoomError("DUPLICATE_ACTION", "El identificador ya pertenece a otra acción.", 409);
+          return { result: previous.result, replayed: true };
+        }
+        if (seq <= player.lastSequence || hasAction(player, actionId)) throw new RoomError("DUPLICATE_ACTION", "Esta acción ya se recibió.", 409);
+        if (state.phase !== "playing") throw new RoomError("NOT_READY", "La misión ya no está en curso.", 409);
+        player.lastSequence = seq;
+        const result = resolveCombatAction(state, player, { kind, slot: payload.slot }, now());
+        player.lastSeenAt = now();
+        if (result.accepted && state.combat?.events) {
+          const actionEvent = state.combat.events.find((event) => event.id === result.eventId);
+          if (actionEvent) Object.assign(actionEvent, {
+            actionId,
+            playerSlot: player.slot,
+            actionKind: kind,
+            abilitySlot: kind === "ability" ? Number(payload.slot) : null,
+            abilityId: result.abilityId || null,
+            targetId: result.target || null,
+            damage: result.damage || 0,
+            breakBonus: !!result.breakBonus,
+          });
+        }
+        player.actions = [...player.actions.slice(-(ACTION_HISTORY_LIMIT - 1)), { id: actionId, sequence: seq, result }];
+        return { result, replayed: false };
+      });
+      return { ...snapshot(room, identity.playerId), actionResult: result.result, replayed: result.replayed };
     },
 
     async poll(roomCode, identity) {
-      const { room } = await read(roomCode);
+      const { room } = await mutate(roomCode, (state) => {
+        const player = playerFrom(state, identity);
+        if (!player.connected) throw new RoomError("DISCONNECTED", "Reconecta la sesión antes de consultar la sala.", 409);
+        const currentTime = now();
+        const lastSeen = Number(player.lastSeenAt ?? player.lastMoveAt ?? state.updatedAt ?? 0);
+        if (currentTime - lastSeen >= PLAYER_HEARTBEAT_MS) player.lastSeenAt = currentTime;
+      });
       const player = playerFrom(room, identity);
       return snapshot(room, player.id);
     },
 
     async disconnect(roomCode, identity) {
       const { room } = await mutate(roomCode, (state) => {
-        playerFrom(state, identity).connected = false;
-        if (state.phase === "playing") state.phase = "lobby";
+        const player = state.players.find((entry) => entry.id === identity?.playerId && entry.token === identity?.token);
+        if (!player) throw new RoomError("INVALID_SESSION", "La sesión no es válida. Vuelve a entrar en la sala.", 401);
+        if (identity.connectionEpoch !== player.connectionEpoch) return;
+        player.connected = false;
+        if (state.phase === "playing") {
+          state.phase = "lobby";
+          if (state.combat && state.combat.pausedAt == null) state.combat.pausedAt = now();
+        }
       });
       return snapshot(room, identity.playerId);
     },
