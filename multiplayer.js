@@ -5,7 +5,7 @@ import { makeFoe } from "./engine/foes.js";
 import { WORLDS, renderWorld } from "./worlds/index.js";
 import { CAMPAIGN } from "./multiplayer/mission.js";
 
-const ENDPOINT = "/.netlify/functions/game";
+const endpoint = "/.netlify/functions/game";
 const ARENA = { left: 48, right: 1232, top: 450, floor: 572, exit: 1125 };
 const MAX_QUEUED_ACTIONS = 8;
 const state = {
@@ -31,7 +31,7 @@ async function api(action, payload = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
-    const response = await fetch(ENDPOINT, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       cache: "no-store",
@@ -1207,7 +1207,7 @@ document.querySelectorAll("[data-ability]").forEach((button) => button.addEventL
 
 window.addEventListener("pagehide", () => {
   if (!state.redirectingToEngine && state.roomId && state.identity) {
-    void fetch(ENDPOINT, {
+    void fetch(endpoint, {
       method: "POST",
       keepalive: true,
       headers: { "content-type": "application/json" },
