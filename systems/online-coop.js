@@ -122,6 +122,14 @@ class OnlineCoop {
     const local = game.player;
     const me = this.currentPlayer(this.snapshot);
     if (local && me) {
+      const serverEvolution = Math.max(0, Math.min(4, Number(me.evolution) || 0));
+      const serverXp = Math.max(0, Number(me.experience) || 0);
+      local.evo = serverEvolution;
+      local.xp = serverXp;
+      applyForm(local, { silent: true });
+      local.maxHealth = Math.max(1, Number(me.maxHealth) || local.maxHealth || 1);
+      local.health = Math.max(0, Math.min(local.maxHealth, Number(me.health) || local.maxHealth));
+      paintFit(local);
       const spawn = ENGINE_INITIAL[me.slot] || ENGINE_INITIAL[0];
       if (Number.isFinite(Number(me.x)) && Number.isFinite(Number(me.y)) &&
           Number(me.y) >= 900 && Number(me.y) <= 1200) {
@@ -422,13 +430,15 @@ class OnlineCoop {
 
     if (!target || Math.hypot(target.x - x, target.y - y) > 180) return;
 
-    const authoritativeHp = Number(payload.remainingHp);
-    target.hp = Number.isFinite(authoritativeHp) ? Math.max(0, authoritativeHp) : Math.max(0, target.hp - damage);
+    target.hp = Math.max(0, target.hp - damage);
     target.dying = Number(payload.dying) || target.dying || 0;
     target.invuln = Math.max(target.invuln || 0, 8);
     target.stun = Math.max(target.stun || 0, 8);
     target._hitT = 10;
     target._hitMax = 10;
+    if (game.player && !game.player.dead) {
+      game.player.xp = Math.max(0, Number(game.player.xp) || 0) + 1;
+    }
     game.nums?.add(target.x, target.y, String(Math.round(damage)), "#9be7ff");
     game.fx?.emit(target.x + target.w / 2, target.y + target.h / 2, {
       color: "#9be7ff",
