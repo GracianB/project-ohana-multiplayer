@@ -64,8 +64,6 @@ class OnlineCoop {
     this.seenSignals = new Set();
     this.localStateSent = "";
     this.lastOrbSignals = new Set();
-    this.localStateSent = "";
-    this.lastOrbSignals = new Set();
   }
 
   readSession() {
@@ -379,6 +377,7 @@ class OnlineCoop {
       if (event.signalKind === "state") {
         const state = String(event.payload?.state || "");
         if (state === "lost") {
+          this.localStateSent = "lost";
           try {
             game.player.dead = true;
             game.player.health = 0;
@@ -388,6 +387,7 @@ class OnlineCoop {
             }));
           } catch (_) {}
         } else if (state === "won") {
+          this.localStateSent = "won";
           try {
             window.dispatchEvent(new CustomEvent("ohana-online-state", {
               detail: { state: "won", senderPlayerId: event.senderPlayerId },
@@ -401,6 +401,9 @@ class OnlineCoop {
         const x = finite(event.payload?.x, NaN);
         const y = finite(event.payload?.y, NaN);
         const xp = Math.max(0, finite(event.payload?.xp, 0));
+        const roomKey = String(event.payload?.roomId || game.roomId || "hub");
+        const orbKey = `${roomKey}:${Math.round(x)}:${Math.round(y)}`;
+        this.lastOrbSignals.add(orbKey);
         if (Number.isFinite(x) && Number.isFinite(y)) {
           const orb = (game.orbs || []).find((item) => !item.taken && Math.hypot(item.x - x, item.y - y) < 42);
           if (orb) {
@@ -420,6 +423,7 @@ class OnlineCoop {
         if (nextRoom && nextRoom !== game.roomId) {
           try { game.loadRoom(nextRoom, "online-peer"); } catch (_) {}
         }
+        if (nextRoom) this.lastLocalWorld = nextRoom;
         this.remoteWorld = nextRoom || this.remoteWorld;
         continue;
       }
@@ -511,21 +515,26 @@ class OnlineCoop {
     void this.poll(game);
 
     const localState = game.player?.dead ? "lost" : game.won ? "won" : "";
+    if (!localState && (this.localStateSent === "lost" || this.localStateSent === "won")) {
+      this.localStateSent = "";
+    }
     if (localState && localState !== this.localStateSent) {
       this.localStateSent = localState;
       void this.signal(game, "state", { state: localState });
     }
 
+    const roomKey = String(game.roomId || "hub");
     const consumedOrbKeys = new Set(this.lastOrbSignals);
     for (const orb of game.orbs || []) {
       if (!orb.taken) continue;
-      const key = `${Math.round(orb.x)}:${Math.round(orb.y)}`;
+      const key = `${roomKey}:${Math.round(orb.x)}:${Math.round(orb.y)}`;
       if (consumedOrbKeys.has(key)) continue;
       consumedOrbKeys.add(key);
       void this.signal(game, "orb", {
         x: orb.x,
         y: orb.y,
         xp: 4,
+        roomId: game.roomId || START_ROOM,
       });
       if (consumedOrbKeys.size > 128) consumedOrbKeys.delete(consumedOrbKeys.values().next().value);
     }
