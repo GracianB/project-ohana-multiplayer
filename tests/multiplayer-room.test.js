@@ -376,9 +376,10 @@ test("original-engine online mode accepts absolute positions and stops synthetic
   assert.equal(first.players.find((player) => player.isYou).worldRoomId, "beach");
 
   advance(10_000);
-  await service.poll(room.host.roomId, room.host.identity);
   await service.poll(room.guest.roomId || room.host.roomId, room.guest.identity);
+  await service.poll(room.host.roomId, room.host.identity);
   advance(10_000);
+  await service.poll(room.guest.roomId || room.host.roomId, room.guest.identity);
   const later = await service.poll(room.host.roomId, room.host.identity);
   assert.equal(later.phase, "playing");
   assert.equal(later.combat.enemies.length, 0);
