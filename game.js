@@ -43,6 +43,7 @@ import { ExperienceDirector } from "./systems/experience.js";
 import { baitLabel } from "./systems/boss-bait.js";
 import { baitFeedbackLabel } from "./systems/boss-bait-feedback.js";
 import { encounterLabel } from "./systems/boss-encounter-memory.js";
+import { onlineCoop } from "./systems/online-coop.js";
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
@@ -622,7 +623,9 @@ function start(def) {
   game.lastAbilityId = null;
   game.lastAbilitySlot = null;
   if (!def) return;
-  const resume = (function () { try { return localStorage.getItem("ohana-resume") === "1"; } catch (e) { return false; } })();
+  const onlineSession = onlineCoop.readSession?.();
+  const onlineMode = !!onlineSession?.originalEngine;
+  const resume = !onlineMode && (function () { try { return localStorage.getItem("ohana-resume") === "1"; } catch (e) { return false; } })();
   try { localStorage.removeItem("ohana-resume"); } catch (e) {}
   input?.reset();
   clock.reset();
@@ -685,7 +688,14 @@ function start(def) {
   renderAbilityBar();
   if (!loadRoom(roomId)) loadRoom("hub");
   if (game._magicSnap) { Magic.restore(game._magicSnap); game._magicSnap = null; }
-  save();
+  if (onlineMode) {
+    void onlineCoop.start(game, def).catch((error) => {
+      console.error("[OHANA online]", error);
+      showErrorMessage("ONLINE", "No se pudo conectar a la partida online.");
+    });
+  } else {
+    save();
+  }
   updateHUD();
   canvas.focus({ preventScroll: true });
 }
@@ -763,6 +773,7 @@ function dash() {
   game.fx.emit(p.x, p.y + p.h * 0.5, { color: p.color || "#fff", count: sig.heavy ? 14 : 10, size: 3, star: true, speed: 3.2, life: 16 });
   beep("dash");
   game.experience?.dash(p);
+  void onlineCoop.signal(game, "action", { action: "dash", characterId: p.id });
 }
 function finiteOr(value, fallback = 0) { return safeFiniteOr(value, fallback); }
 function damageEnemy(e, amount) { if (e.dying > 0) return true; return safeDamageEnemy(e, amount); }
@@ -844,6 +855,13 @@ function markHit(p, e, dmg, kb) {
     game.flashColor = "#fff6c8";
   }
   addPlayerXp(p, 1);
+  void onlineCoop.signal(game, "hit", {
+    characterId: p.id,
+    kind: e.kind,
+    x: e.x,
+    y: e.y,
+    damage: d,
+  });
   if (game.combo >= 5) {
     game.fx.emit(e.x + e.w / 2, e.y + e.h / 2, { color: p.color || "#fff6c8", count: 8, size: 3, star: true, speed: 2.4 });
     game.nums.add(e.x, e.y - 16, "x" + game.combo, "#fff6c8");
@@ -971,6 +989,7 @@ function attack() {
   }
 
   showSwing(p, evo, def);
+  void onlineCoop.signal(game, "action", { action: "attack", characterId: p.id });
 }
 function gameDifficulty() {
   try {
@@ -2477,6 +2496,7 @@ function render() {
   for (const pr of game.projectiles) drawProjectile(ctx, pr, game.cam, t);
   for (const b of game.bolts) drawBolt(ctx, b, game.cam, t);
   for (const s of game.slashes || []) drawSlash(ctx, s, game.cam);
+  onlineCoop.render(ctx, game, t);
   game.fx.render(ctx, game.cam); game.combatFx?.render(ctx, game.cam); game.nums.render(ctx, game.cam);
   if (DeathFx.isPlaying()) {
     DeathFx.draw(ctx, game.cam, t);
@@ -2665,6 +2685,11 @@ function castPower(index) {
     return;
   }
   useAbility(game, index);
+  void onlineCoop.signal(game, "action", {
+    action: "ability",
+    slot: index,
+    characterId: p.id,
+  });
 }
 function renderAbilityBar() {
   const bar = DOM.abilityBar;
@@ -2860,6 +2885,7 @@ function step() {
   Rain.update(game, { onTickDamage: (n) => hurtPlayer(n, "lluvia") });
   Surprises.update(game, t);
   updateCam();
+  onlineCoop.tick(game);
   if ((t & 3) === 0) updateHUD();
   if (t % 300 === 0) save();
 }
@@ -3022,6 +3048,16 @@ addEventListener("ohana-evolve-done", (e) => {
 });
 
 setupSelect();
+
+const onlineBoot = new URLSearchParams(location.search);
+if (onlineBoot.get("online") === "1") {
+  const session = onlineCoop.readSession?.();
+  const id = session?.characterId || session?.selectedCharacterId;
+  const def = id && ROSTER.find((character) => character.id === id);
+  if (session?.originalEngine && def) {
+    start(def);
+  }
+}
 
 const e2eParams = new URLSearchParams(location.search);
 const e2eEnabled = location.hostname === "127.0.0.1" && e2eParams.has("e2e");
