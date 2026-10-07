@@ -1431,7 +1431,11 @@ function updatePlayer() {
   if (p.invuln > 0) p.invuln--;
   for (const o of game.orbs) {
     if (!o.taken && Math.hypot(p.x + p.w / 2 - o.x, p.y + p.h / 2 - o.y) < 28) {
-      o.taken = true; addPlayerXp(p, 4 + Surprises.starOrbBonus()); addScore(25); beep("pickup"); game.nums.add(o.x, o.y, "+XP", "#ffe66a");
+      o.taken = true;
+      const orbXp = 4 + Surprises.starOrbBonus();
+      addPlayerXp(p, orbXp);
+      void onlineCoop.signal(game, "orb", { x: o.x, y: o.y, xp: orbXp, roomId: game.roomId });
+      addScore(25); beep("pickup"); game.nums.add(o.x, o.y, "+XP", "#ffe66a");
       if (game.orbs.every((q) => q.taken)) { beep("objective"); showObjectiveMessage("CRISTALES COMPLETOS", room().name + " · todos los cristales recogidos"); addScore(100); }
     }
   }
@@ -2972,6 +2976,20 @@ function setupSelect() {
   if (quit) quit.onclick = returnToMenu;
   $("btn-close-help")?.addEventListener("click", () => DOM.help.classList.remove("open"));
   $("btn-close-map")?.addEventListener("click", () => DOM.map.classList.remove("open"));
+  addEventListener("ohana-online-state", (event) => {
+    if (!onlineCoop.enabled || !game.player) return;
+    const state = event.detail?.state;
+    if (state === "won" && game.boss && !game.finale && !game.won) {
+      game.boss.hp = 0;
+      game.boss.fell = false;
+      beginFinale(game.boss);
+    } else if (state === "lost" && !game.won) {
+      game.player.dead = true;
+      game.player.health = 0;
+      showErrorMessage("DERROTA", "La familia cae junta. R vuelve al claro.");
+    }
+  });
+
   addEventListener("ohana-after", (e) => {
     const act = e.detail && e.detail.action;
     if (act === "continue") {
