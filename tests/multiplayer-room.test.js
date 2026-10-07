@@ -353,3 +353,59 @@ test("every existing OHANA character ability has a server combat profile", async
     assert.notEqual(result.actionResult.reason, "Esa habilidad no está disponible.", `${ROSTER.find((entry) => entry.id === "yomi").abilities[slot]} debe tener una regla de combate`);
   }
 });
+
+
+test("original-engine online mode accepts absolute positions and stops synthetic server combat", async () => {
+  const { service, advance } = setup();
+  const room = await makeRoom(service);
+  await startMatch(service, room);
+  const first = await service.move(room.host.roomId, room.host.identity, {
+    mode: "engine",
+    positionX: 512,
+    positionY: 500,
+    facing: -1,
+    evolution: 2,
+    experience: 140,
+    worldRoomId: "beach",
+    sequence: 1,
+    actionId: "engine:host:1",
+  });
+  assert.equal(first.accepted, true);
+  assert.equal(first.players.find((player) => player.isYou).x, 512);
+  assert.equal(first.players.find((player) => player.isYou).y, 500);
+  assert.equal(first.players.find((player) => player.isYou).worldRoomId, "beach");
+
+  advance(20_000);
+  const later = await service.poll(room.host.roomId, room.host.identity);
+  assert.equal(later.phase, "playing");
+  assert.equal(later.combat.enemies.length, 0);
+  assert.equal(later.combat.boss, null);
+});
+
+test("original-engine online signals relay peer attacks without changing single-player simulation", async () => {
+  const { service } = setup();
+  const room = await makeRoom(service);
+  await startMatch(service, room);
+
+  const sent = await service.signal(room.host.roomId, room.host.identity, {
+    sequence: 1,
+    actionId: "engine:signal:1",
+    signalKind: "action",
+    payload: { action: "attack", roomId: "hub" },
+  });
+
+  assert.equal(sent.combat.events.some((event) =>
+    event.kind === "online-signal" &&
+    event.senderPlayerId === room.host.identity.playerId &&
+    event.signalKind === "action"
+  ), true);
+  assert.equal(sent.combat.enemies.length, 0);
+
+  const replay = await service.signal(room.host.roomId, room.host.identity, {
+    sequence: 1,
+    actionId: "engine:signal:1",
+    signalKind: "action",
+    payload: { action: "attack", roomId: "hub" },
+  });
+  assert.equal(replay.combat.events.filter((event) => event.id === sent.combat.lastEvent.id).length, 1);
+});
