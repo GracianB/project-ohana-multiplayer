@@ -446,3 +446,47 @@ test("original-engine sync preserves the 1260px world floor and full player pose
   assert.equal(player.pose.vy, -12);
   assert.equal(player.pose.grounded, false);
 });
+
+
+test("online world signals relay shared defeat/victory state without duplicating events", async () => {
+  const { service } = setup();
+  const room = await makeRoom(service);
+  await startMatch(service, room);
+
+  const lost = await service.signal(room.host.roomId, room.host.identity, {
+    sequence: 1,
+    actionId: "state:lost:1",
+    signalKind: "state",
+    payload: { state: "lost", roomId: "beach" },
+  });
+
+  const lostEvent = lost.combat.events.find((event) => event.signalKind === "state" && event.payload.state === "lost");
+  assert.ok(lostEvent);
+  assert.equal(lostEvent.senderPlayerId, room.host.identity.playerId);
+
+  const replay = await service.signal(room.host.roomId, room.host.identity, {
+    sequence: 1,
+    actionId: "state:lost:1",
+    signalKind: "state",
+    payload: { state: "lost", roomId: "beach" },
+  });
+  assert.equal(replay.combat.events.filter((event) => event.id === lostEvent.id).length, 1);
+});
+
+test("online orb signals are scoped to the current world position", async () => {
+  const { service } = setup();
+  const room = await makeRoom(service);
+  await startMatch(service, room);
+
+  const sent = await service.signal(room.host.roomId, room.host.identity, {
+    sequence: 1,
+    actionId: "orb:beach:420:960",
+    signalKind: "orb",
+    payload: { roomId: "beach", x: 420, y: 960, xp: 8 },
+  });
+
+  const event = sent.combat.events.find((item) => item.signalKind === "orb");
+  assert.ok(event);
+  assert.equal(event.payload.roomId, "beach");
+  assert.equal(event.payload.xp, 8);
+});
