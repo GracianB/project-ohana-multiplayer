@@ -93,6 +93,7 @@ const PRECACHE = [
   "./systems/online-coop.js?v=" + VERSION,
   "./systems/xp.js?v=" + VERSION,
   "./worlds/index.js?v=" + VERSION,
+  "./worlds/odyssey-sectors.js?v=" + VERSION,
   "./worlds/room-atmosphere.js?v=" + VERSION,
   "./worlds/painted-hub.js?v=" + VERSION,
   "./worlds/terrain.js?v=" + VERSION,
