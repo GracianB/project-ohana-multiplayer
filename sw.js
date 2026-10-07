@@ -90,6 +90,7 @@ const PRECACHE = [
   "./systems/title-fx.js?v=" + VERSION,
   "./systems/title.js?v=" + VERSION,
   "./systems/experience.js?v=" + VERSION,
+  "./systems/online-coop.js?v=" + VERSION,
   "./systems/xp.js?v=" + VERSION,
   "./worlds/index.js?v=" + VERSION,
   "./worlds/room-atmosphere.js?v=" + VERSION,
