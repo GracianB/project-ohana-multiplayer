@@ -2481,9 +2481,16 @@ function render() {
   ctx.translate(-centerX, -centerY);
   if (paintedHubOn(game.roomId)) drawPaintedHub(ctx, game.cam, game.worldW, game.worldH, camW(), camH());
   else {
-    const painted = drawPaintedRoom(ctx, game.roomId, camW(), camH());
-    if (!painted) renderWorld(ctx, world, game.cam, t, camW(), camH());
-    drawRoomAtmosphere(ctx, game.roomId, game.cam, t, camW(), camH());
+    renderWorld(ctx, world, game.cam, t, camW(), camH());
+    drawRoomAtmosphere(
+      ctx,
+      game.roomId,
+      game.cam,
+      t,
+      camW(),
+      camH(),
+      game.player?.id
+    );
     drawTerrain(ctx, game.platforms, world, game.cam, t);
   }
   const r = room();
