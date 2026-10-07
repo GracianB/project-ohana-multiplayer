@@ -6,6 +6,8 @@ const MOVE_MIN_INTERVAL_MS = 240;
 const PLAYER_HEARTBEAT_MS = 4_000;
 const PLAYER_STALE_MS = 15_000;
 const ACTION_HISTORY_LIMIT = 128;
+const ENGINE_WORLD_W = 2240;
+const ENGINE_WORLD_H = 1260;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export class RoomError extends Error {
@@ -52,7 +54,8 @@ function snapshot(room, viewerId) {
       maxHealth: player.maxHealth ?? null,
       dodgeUntil: player.dodgeUntil ?? 0,
       name: player.slot === 0 ? "Jugador 1" : "Jugador 2",
-      worldRoomId: player.worldRoomId || "hub",
+      worldRoomId: player.worldRoomId || "beach",
+      pose: structuredClone(player.pose || { vx: 0, vy: 0, grounded: true, melee: 0, dash: 0 }),
     })),
     combat: room.combat ? structuredClone(room.combat) : null,
     engineMode: !!room.engineMode,
@@ -167,7 +170,7 @@ export function createRoomService(store, options = {}) {
           tick: 0,
           createdAt: now(),
           updatedAt: now(),
-          players: [{ id: crypto.randomUUID(), token: credential(), connectionEpoch: 1, slot: 0, characterId: "", ready: false, x: 390, y: 572, facing: 1, connected: true, lastSequence: 0, lastMoveAt: now(), lastSeenAt: now(), dodgeUntil: 0, actions: [] }],
+          players: [{ id: crypto.randomUUID(), token: credential(), connectionEpoch: 1, slot: 0, characterId: "", ready: false, x: 420, y: 1070, facing: 1, connected: true, lastSequence: 0, lastMoveAt: now(), lastSeenAt: now(), dodgeUntil: 0, pose: { vx: 0, vy: 0, grounded: true, melee: 0, dash: 0 }, worldRoomId: "beach", actions: [] }],
         };
         const write = await store.setJSON(`room:${roomCode}`, room, { onlyIfNew: true });
         if (write.modified) return { ...snapshot(room, room.players[0].id), identity: { playerId: room.players[0].id, token: room.players[0].token, connectionEpoch: 1 } };
@@ -196,6 +199,13 @@ export function createRoomService(store, options = {}) {
         if (state.players.length === 2 && state.players.every((player) => player.connected && player.characterId && player.ready)) {
           resumeCombat(state, now());
           state.phase = "playing";
+          for (const entry of state.players) {
+            entry.worldRoomId = entry.worldRoomId || "beach";
+            entry.x = entry.slot === 0 ? 420 : 1500;
+            entry.y = 1070;
+            entry.facing = entry.slot === 0 ? 1 : -1;
+            entry.pose = { vx: 0, vy: 0, grounded: true, melee: 0, dash: 0 };
+          }
           state.combat ||= createCombat(state.players, now());
         }
       });
@@ -265,12 +275,21 @@ export function createRoomService(store, options = {}) {
             state.combat.enemies = [];
             state.combat.boss = null;
           }
-          player.x = Math.max(48, Math.min(1232, Number(payload?.positionX) || player.x));
-          player.y = Math.max(0, Math.min(720, Number(payload?.positionY) || player.y));
+          player.x = Math.max(0, Math.min(ENGINE_WORLD_W, Number(payload?.positionX) || player.x));
+          player.y = Math.max(0, Math.min(ENGINE_WORLD_H, Number(payload?.positionY) || player.y));
           player.facing = Number(payload?.facing) < 0 ? -1 : 1;
           player.evolution = Math.max(0, Math.min(4, Math.floor(Number(payload?.evolution) || 0)));
           player.experience = Math.max(0, Number(payload?.experience) || 0);
-          player.worldRoomId = String(payload?.worldRoomId || player.worldRoomId || "hub");
+          player.health = Math.max(0, Number(payload?.health) || player.health || 0);
+          player.maxHealth = Math.max(1, Number(payload?.maxHealth) || player.maxHealth || 1);
+          player.worldRoomId = String(payload?.worldRoomId || player.worldRoomId || "beach");
+          player.pose = {
+            vx: Math.max(-40, Math.min(40, Number(payload?.velocityX) || 0)),
+            vy: Math.max(-60, Math.min(60, Number(payload?.velocityY) || 0)),
+            grounded: payload?.grounded !== false,
+            melee: Math.max(0, Math.min(30, Number(payload?.melee) || 0)),
+            dash: Math.max(0, Math.min(30, Number(payload?.dash) || 0)),
+          };
           player.lastSequence = seq;
           player.lastSeenAt = currentTime;
           const moveResult = { accepted: true, cinematic: false };
