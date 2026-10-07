@@ -126,7 +126,16 @@ function acceptSnapshot(snapshot) {
 }
 
 function persistSession() {
-  try { sessionStorage.setItem("ohana-coop-session", JSON.stringify({ roomId: state.roomId, identity: state.identity })); } catch {}
+  try {
+    const you = state.snapshot?.players?.find((player) => player.isYou);
+    sessionStorage.setItem("ohana-coop-session", JSON.stringify({
+      roomId: state.roomId,
+      identity: state.identity,
+      characterId: you?.characterId || state.selectedCharacterId || "",
+      selectedCharacterId: you?.characterId || state.selectedCharacterId || "",
+      originalEngine: true,
+    }));
+  } catch {}
 }
 
 function drawPortrait(canvas, definition) {
@@ -311,21 +320,10 @@ async function reconnectSession() {
 }
 
 function enterGame() {
-  if (state.running) return;
-  state.running = true;
-  lobby.hidden = true;
-  gamePanel.hidden = false;
-  state.lastPoll = 0;
-  state.lastFrame = 0;
-  const you = state.snapshot.players.find((player) => player.isYou);
-  state.localPose = { x: you?.x ?? 420, y: you?.y ?? ARENA.floor };
-  document.querySelectorAll("[data-ability]").forEach((button) => {
-    const slot = Number(button.dataset.ability);
-    const ability = ROSTER.find((item) => item.id === you?.characterId)?.abilities?.[slot];
-    button.textContent = `${["J", "K", "L"][slot]} · ${labelForAbility(ability)}`;
-  });
-  state.bossVisualX = state.snapshot.combat?.boss?.x ?? 640;
-  state.raf = requestAnimationFrame(drawFrame);
+  if (state.redirectingToEngine) return;
+  state.redirectingToEngine = true;
+  persistSession();
+  window.location.href = "./index.html?online=1";
 }
 
 function stageFloor(ctx, world, t) {
@@ -1208,7 +1206,7 @@ $("touch-dodge").addEventListener("click", () => sendCombatAction("dodge"));
 document.querySelectorAll("[data-ability]").forEach((button) => button.addEventListener("click", () => sendCombatAction("ability", Number(button.dataset.ability))));
 
 window.addEventListener("pagehide", () => {
-  if (state.roomId && state.identity) {
+  if (!state.redirectingToEngine && state.roomId && state.identity) {
     void fetch(ENDPOINT, {
       method: "POST",
       keepalive: true,
