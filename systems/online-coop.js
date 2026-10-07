@@ -5,6 +5,12 @@ const ENDPOINT = "/.netlify/functions/game";
 const REMOTE_LERP = 0.22;
 const SEND_INTERVAL_MS = 125;
 const POLL_INTERVAL_MS = 180;
+const START_ROOM = "beach";
+const STAGE_ROOMS = ["beach", "jungle", "volcano", "boss", "boss"];
+const ENGINE_INITIAL = {
+  0: { x: 420, y: 1070 },
+  1: { x: 1500, y: 1070 },
+};
 
 function finite(value, fallback) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -92,6 +98,35 @@ class OnlineCoop {
     document.body.dataset.onlineRoom = this.roomId;
 
     await this.poll(game, true);
+
+    // Online mode reuses the original OHANA room/physics/rendering.
+    // The lobby's synthetic 1280×720 coordinates are never applied to it.
+    const stageIndex = Math.max(0, Math.min(STAGE_ROOMS.length - 1, Number(this.snapshot?.combat?.campaign?.stageIndex) || 0));
+    const initialRoom = this.snapshot?.players?.find((player) => player.isYou)?.worldRoomId
+      || STAGE_ROOMS[stageIndex]
+      || START_ROOM;
+
+    try {
+      game.loadRoom(initialRoom, "online");
+    } catch (_) {
+      game.loadRoom(START_ROOM, "online");
+    }
+
+    const local = game.player;
+    const me = this.currentPlayer(this.snapshot);
+    if (local && me) {
+      // Use the original engine's spawn until an engine-position packet exists.
+      const legacyCoord = Number(me.y) > 0 && Number(me.y) <= 720;
+      if (legacyCoord) {
+        const spawn = ENGINE_INITIAL[me.slot] || ENGINE_INITIAL[0];
+        local.x = spawn.x;
+        local.y = spawn.y;
+        local.vx = 0;
+        local.vy = 0;
+      }
+    }
+
+    await this.sendPosition(game, true);
     this.ensurePeerHud();
     return true;
   }
@@ -135,8 +170,10 @@ class OnlineCoop {
 
     const worldRoom = remote.worldRoomId || "hub";
     const previous = this.remote;
-    const targetX = finite(remote.x, previous?.targetX ?? remote.x);
-    const targetY = finite(remote.y, previous?.targetY ?? remote.y);
+    const legacyCoord = !snapshot.engineMode && Number(remote.y) > 0 && Number(remote.y) <= 720;
+    const spawn = ENGINE_INITIAL[remote.slot] || ENGINE_INITIAL[1];
+    const targetX = legacyCoord ? (previous?.targetX ?? spawn.x) : finite(remote.x, previous?.targetX ?? spawn.x);
+    const targetY = legacyCoord ? (previous?.targetY ?? spawn.y) : finite(remote.y, previous?.targetY ?? spawn.y);
 
     if (!previous || previous.playerId !== remote.playerId) {
       this.remote = {
@@ -154,6 +191,8 @@ class OnlineCoop {
         invuln: 0,
         slot: remote.slot,
         phase: Math.random() * 100,
+        health: remote.health,
+        maxHealth: remote.maxHealth,
       };
     } else {
       this.remote.targetX = targetX;
@@ -162,6 +201,8 @@ class OnlineCoop {
       this.remote.evolution = remote.evolution ?? this.remote.evolution ?? 1;
       this.remote.facing = remote.facing || this.remote.facing || 1;
       this.remote.slot = remote.slot;
+      this.remote.health = remote.health;
+      this.remote.maxHealth = remote.maxHealth;
     }
 
     this.remoteWorld = worldRoom;
@@ -210,10 +251,10 @@ class OnlineCoop {
     }
   }
 
-  async sendPosition(game) {
+  async sendPosition(game, force = false) {
     if (!this.enabled || this.sending || !game.player || game.player.dead || !this.roomId || !this.identity) return;
     const now = performance.now();
-    if (now - this.lastSend < SEND_INTERVAL_MS) return;
+    if (!force && now - this.lastSend < SEND_INTERVAL_MS) return;
 
     this.lastSend = now;
     this.sending = true;
@@ -233,7 +274,9 @@ class OnlineCoop {
         facing: game.player.facing || 1,
         evolution: Math.max(0, Math.min(4, Number(game.player.evo) || 0)),
         experience: finite(game.player.xp, 0),
-        worldRoomId: game.roomId || "hub",
+        health: finite(game.player.health, 0),
+        maxHealth: finite(game.player.maxHealth, 1),
+        worldRoomId: game.roomId || START_ROOM,
       });
 
       if (data?.players) {
@@ -357,7 +400,7 @@ class OnlineCoop {
       this.remote.dash = Math.max(0, this.remote.dash - 1);
       this.remote.invuln = Math.max(0, this.remote.invuln - 1);
       const dy = this.remote.targetY - this.remote.y;
-      this.remote.grounded = Math.abs(dy) < 2;
+        this.remote.grounded = Math.abs(dy) < 3;
       this.remote.phase += 0.7;
     }
 
