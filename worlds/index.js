@@ -12,7 +12,8 @@ export const WORLDS = [
   { id: "space",   name: "Espacio",   ground: "#161628", groundTop: "#7a5cff", edge: "#9a7cff", sky: ["#03030c", "#0b0a24", "#191542"] },
   { id: "lab",     name: "Alien Lab", ground: "#15202a", groundTop: "#3ee0ff", edge: "#7af3ff", sky: ["#050d13", "#0a1a24", "#123646"] },
   { id: "aquatic", name: "Abismo",    ground: "#0a3a58", groundTop: "#3ec8e8", edge: "#8af8ff", platOutline: "rgba(150,245,255,.85)", sky: ["#010c1c", "#042848", "#0a4a78"] },
-  { id: "grove",   name: "Claro",     ground: "#3a6a32", groundTop: "#7ec85a", edge: "#b8f090", sky: ["#6eb8e8", "#a8d8f0", "#e8f4c8"] }
+  { id: "grove",   name: "Claro",     ground: "#3a6a32", groundTop: "#7ec85a", edge: "#b8f090", sky: ["#6eb8e8", "#a8d8f0", "#e8f4c8"] },
+  { id: "boss",    name: "Nido",      ground: "#24131d", groundTop: "#6d3341", edge: "#ff8a6e", sky: ["#080612", "#1b0d1d", "#4b1726"] }
 ];
 
 // deterministic pseudo-random for stable star/particle fields
@@ -34,7 +35,8 @@ function cinematicGrade(ctx, world, W, H, t) {
     space:   ["rgba(125,105,255,.10)", "rgba(0,0,22,.34)"],
     lab:     ["rgba(70,230,255,.09)", "rgba(0,15,25,.28)"],
     aquatic: ["rgba(80,230,255,.08)", "rgba(0,18,45,.30)"],
-    grove:   ["rgba(220,245,180,.08)", "rgba(10,35,15,.18)"]
+    grove:   ["rgba(220,245,180,.08)", "rgba(10,35,15,.18)"],
+    boss:    ["rgba(255,105,120,.10)", "rgba(18,3,18,.40)"]
   };
   const [top, bottom] = profiles[id] || profiles.beach;
   const g = ctx.createLinearGradient(0,0,0,H);
@@ -76,6 +78,7 @@ export function renderWorld(ctx, world, cam, t, W, H) {
   else if (world.id === "lab") drawLab(ctx, cam, t, W, H);
   else if (world.id === "aquatic") drawAquatic(ctx, cam, t, W, H);
   else if (world.id === "grove") drawGrove(ctx, cam, t, W, H);
+  else if (world.id === "boss") drawBossWorld(ctx, cam, t, W, H);
 
   // subtle global top vignette to seat the HUD
   const tv = ctx.createLinearGradient(0, 0, 0, 160);
@@ -1179,4 +1182,80 @@ export function drawAquatic(ctx, cam, t, W, H) {
     }
     ctx.stroke();
   }
+}
+
+/* ───────────────────────── NIDO · final room ───────────────────────── */
+function drawBossWorld(ctx, cam, t, W, H) {
+  const pulse = 0.5 + Math.sin(t * 0.045) * 0.08;
+  // Deep cavern layers
+  for (let layer = 0; layer < 4; layer++) {
+    const par = 0.05 + layer * 0.08;
+    const baseY = H * (0.48 + layer * 0.07);
+    ctx.fillStyle = [
+      "rgba(12,5,18,.55)",
+      "rgba(29,9,26,.62)",
+      "rgba(54,15,31,.68)",
+      "rgba(91,29,38,.78)"
+    ][layer];
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    ctx.lineTo(0, baseY);
+    for (let i = 0; i <= 10; i++) {
+      const x = i * W / 10;
+      const y = baseY + Math.sin(i * 1.7 + cam.x * par * .01) * (18 + layer * 8);
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Hanging roots / thorns create a readable Nido silhouette.
+  for (let i = 0; i < 15; i++) {
+    const x = wrap(i * 170 - cam.x * .18, W + 220) - 110;
+    const len = 50 + (i % 5) * 24;
+    ctx.strokeStyle = i % 3 ? "rgba(48,19,30,.92)" : "rgba(107,38,48,.9)";
+    ctx.lineWidth = 5 + (i % 3);
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.bezierCurveTo(x - 18, len * .35, x + 30, len * .55, x + (i % 2 ? 12 : -18), len);
+    ctx.stroke();
+    for (let j = 1; j < 4; j++) {
+      const yy = len * j / 4;
+      ctx.fillStyle = "rgba(20,6,14,.95)";
+      ctx.beginPath();
+      ctx.moveTo(x + (j % 2) * 8, yy);
+      ctx.lineTo(x + (j % 2 ? 20 : -18), yy + 9);
+      ctx.lineTo(x + (j % 2) * 6, yy + 3);
+      ctx.fill();
+    }
+  }
+
+  // A warm nest-light source behind the boss keeps the final room readable.
+  const gx = W * .72, gy = H * .44;
+  const glow = ctx.createRadialGradient(gx, gy, 5, gx, gy, 270);
+  glow.addColorStop(0, `rgba(255,104,78,${.28 + pulse * .15})`);
+  glow.addColorStop(.32, "rgba(255,66,72,.11)");
+  glow.addColorStop(1, "rgba(255,40,60,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(gx - 270, gy - 270, 540, 540);
+
+  // Circular nest sigils on the back wall.
+  ctx.save();
+  ctx.translate(gx, gy + 40);
+  ctx.strokeStyle = `rgba(255,205,112,${.14 + pulse * .08})`;
+  ctx.lineWidth = 2;
+  for (let r = 70; r <= 190; r += 40) {
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 8; i++) {
+    const a = t * .003 + i * Math.PI / 4;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 65, Math.sin(a) * 65);
+    ctx.lineTo(Math.cos(a) * 190, Math.sin(a) * 190);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
