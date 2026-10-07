@@ -413,3 +413,36 @@ test("original-engine online signals relay peer attacks without changing single-
   });
   assert.equal(replay.combat.events.filter((event) => event.id === sent.combat.lastEvent.id).length, 1);
 });
+
+
+test("original-engine sync preserves the 1260px world floor and full player pose", async () => {
+  const { service } = setup();
+  const room = await makeRoom(service);
+  await startMatch(service, room);
+
+  const moved = await service.move(room.host.roomId, room.host.identity, {
+    mode: "engine",
+    positionX: 2010,
+    positionY: 1120,
+    velocityX: 8,
+    velocityY: -12,
+    grounded: false,
+    facing: -1,
+    evolution: 3,
+    experience: 260,
+    health: 87,
+    maxHealth: 120,
+    worldRoomId: "volcano",
+    sequence: 1,
+    actionId: "engine:pose:1",
+  });
+
+  const player = moved.players.find((entry) => entry.isYou);
+  assert.equal(moved.engineMode, true);
+  assert.equal(player.x, 2010);
+  assert.equal(player.y, 1120);
+  assert.equal(player.worldRoomId, "volcano");
+  assert.equal(player.pose.vx, 8);
+  assert.equal(player.pose.vy, -12);
+  assert.equal(player.pose.grounded, false);
+});
