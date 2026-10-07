@@ -1,4 +1,5 @@
 const TAU=Math.PI*2;
+import { drawOdysseySectors } from "./odyssey-sectors.js";
 function u(n){const x=Math.sin(n*91.17+17.31)*43758.5453;return x-Math.floor(x);}
 function w(v,s){const m=v%s;return m<0?m+s:m;}
 function vig(ctx,W,H,a){const g=ctx.createRadialGradient(W*.5,H*.44,H*.18,W*.5,H*.48,Math.max(W,H)*.78);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,"+a+")");ctx.fillStyle=g;ctx.fillRect(0,0,W,H);}
@@ -17,6 +18,7 @@ const CHARACTER_THEMES = {
 
 export function drawRoomAtmosphere(ctx,id,cam,t,W,H,characterId){
  ctx.save();ctx.globalCompositeOperation="source-over";
+ drawOdysseySectors(ctx,id,cam,t,W,H,characterId);
  if(id==="hub") hub(ctx,cam,t,W,H); else if(id==="beach") beach(ctx,cam,t,W,H); else if(id==="jungle") jungle(ctx,cam,t,W,H);
  else if(id==="cave") cave(ctx,cam,t,W,H); else if(id==="lab") lab(ctx,cam,t,W,H); else if(id==="ridge") ridge(ctx,cam,t,W,H);
  else if(id==="space") space(ctx,cam,t,W,H); else if(id==="reef") reef(ctx,cam,t,W,H); else if(id==="volcano") volcano(ctx,cam,t,W,H); else if(id==="boss") boss(ctx,cam,t,W,H);
