@@ -983,13 +983,17 @@ function attack() {
     );
   }
   
+  void onlineCoop.signal(game, "action", {
+    action: "attack",
+    characterId: p.id,
+  });
+
   if (p.id === "cuerno") {
     hornPoke(p, evo, def);
     return;
   }
 
   showSwing(p, evo, def);
-  void onlineCoop.signal(game, "action", { action: "attack", characterId: p.id });
 }
 function gameDifficulty() {
   try {
@@ -1022,6 +1026,11 @@ function hurtPlayer(amount, label) {
   buzz(24);
   hitStop(2);
   game.experience?.hurt(p, amount);
+  void onlineCoop.signal(game, "hurt", {
+    targetPlayerId: onlineCoop.identity?.playerId || null,
+    amount,
+    health: Math.max(0, p.health),
+  });
   game.nums.add(p.x, p.y, label || ("-" + Math.round(amount)), "#ff6a7a");
   const hurt = document.getElementById("fx-hurt");
   if (hurt) { hurt.classList.add("on"); setTimeout(() => hurt.classList.remove("on"), 220); }
