@@ -80,6 +80,8 @@ export function renderWorld(ctx, world, cam, t, W, H) {
   else if (world.id === "grove") drawGrove(ctx, cam, t, W, H);
   else if (world.id === "boss") drawBossWorld(ctx, cam, t, W, H);
 
+  drawWorldLandmarks(ctx, world, cam, t, W, H);
+
   // subtle global top vignette to seat the HUD
   const tv = ctx.createLinearGradient(0, 0, 0, 160);
   tv.addColorStop(0, "rgba(0,0,0,.22)"); tv.addColorStop(1, "rgba(0,0,0,0)");
@@ -1256,6 +1258,87 @@ function drawBossWorld(ctx, cam, t, W, H) {
     ctx.moveTo(Math.cos(a) * 65, Math.sin(a) * 65);
     ctx.lineTo(Math.cos(a) * 190, Math.sin(a) * 190);
     ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawWorldLandmarks(ctx, world, cam, t, W, H) {
+  const id = world && world.id || "beach";
+  const p = Math.sin(t * 0.006);
+  ctx.save();
+  if (id === "beach") {
+    const sx = W * 0.78, sy = H * 0.16;
+    const rg = ctx.createRadialGradient(sx, sy, 8, sx, sy, 260);
+    rg.addColorStop(0, "rgba(255,229,168,.80)");
+    rg.addColorStop(.22, "rgba(255,198,110,.28)");
+    rg.addColorStop(1, "rgba(255,190,100,0)");
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "rgba(255,255,240,.14)"; ctx.lineWidth = 9;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI * 2 / 8 + t * 0.0007;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(a) * 380, sy + Math.sin(a) * 260); ctx.stroke();
+    }
+  } else if (id === "jungle") {
+    for (let i = 0; i < 7; i++) {
+      const x = wrap(i * 360 - cam.x * 0.05 + t * 0.02, W + 420) - 180;
+      const y = H * 0.13 + (i % 3) * 42;
+      ctx.fillStyle = "rgba(72,175,96,.13)";
+      ctx.beginPath(); ctx.ellipse(x, y, 130, 46, Math.sin(t * 0.002 + i) * .2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "rgba(190,255,175,.18)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x - 72, y + 10); ctx.quadraticCurveTo(x, y - 54, x + 74, y + 14); ctx.stroke();
+    }
+  } else if (id === "volcano") {
+    const vx = W * .72 - cam.x * .04, vy = H * .34;
+    const rg = ctx.createRadialGradient(vx, vy, 10, vx, vy, 240);
+    rg.addColorStop(0, "rgba(255,110,42," + (.24 + .06 * Math.sin(t * .018)) + ")");
+    rg.addColorStop(1, "rgba(255,60,20,0)");
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "rgba(255,180,92,.25)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(vx - 92, vy + 52); ctx.quadraticCurveTo(vx, vy - 34, vx + 92, vy + 52); ctx.stroke();
+  } else if (id === "space") {
+    const cx = W * .78, cy = H * .28;
+    for (let i = 0; i < 4; i++) {
+      ctx.strokeStyle = "rgba(175,158,255," + (.18 - i * .025) + ")"; ctx.lineWidth = 3 - i * .3;
+      ctx.beginPath(); ctx.arc(cx, cy, 105 + i * 28, p * .2 + i * .7, p * .2 + i * .7 + 4.7); ctx.stroke();
+    }
+  } else if (id === "lab") {
+    for (let i = 0; i < 5; i++) {
+      const x = wrap(i * 300 - cam.x * .06, W + 340) - 160;
+      const y = H * .17 + (i % 2) * 72;
+      ctx.strokeStyle = "rgba(90,240,255,.22)"; ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, 150, 92);
+      ctx.fillStyle = "rgba(90,240,255,.06)"; ctx.fillRect(x + 10, y + 10, 130, 72);
+      ctx.beginPath(); ctx.arc(x + 75, y + 46, 22 + 7 * Math.sin(t * .02 + i), 0, Math.PI * 2); ctx.stroke();
+    }
+  } else if (id === "aquatic") {
+    for (let i = 0; i < 10; i++) {
+      const x = wrap(i * 250 - cam.x * .10, W + 300) - 140;
+      const base = H * .86;
+      ctx.strokeStyle = "rgba(100,230,245,.18)"; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(x, base); ctx.quadraticCurveTo(x + 38, base - 120, x + Math.sin(t * .01 + i) * 12, base - 230); ctx.stroke();
+    }
+  } else if (id === "grove") {
+    const cx = W * .5, cy = H * .31;
+    ctx.strokeStyle = "rgba(222,255,192,.17)"; ctx.lineWidth = 4;
+    for (let i = 0; i < 9; i++) {
+      const a = i * Math.PI * 2 / 9 + t * .0005;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.quadraticCurveTo(cx + Math.cos(a) * 90, cy + Math.sin(a) * 60, cx + Math.cos(a) * 210, cy + Math.sin(a) * 150); ctx.stroke();
+    }
+  } else if (id === "boss") {
+    const cx = W * .5, cy = H * .44;
+    for (let i = 0; i < 7; i++) {
+      const r = 125 + i * 30 + Math.sin(t * .01 + i) * 4;
+      ctx.strokeStyle = i % 2 ? "rgba(255,94,118,.18)" : "rgba(255,220,120,.14)";
+      ctx.lineWidth = 4 - i * .35;
+      ctx.beginPath(); ctx.arc(cx, cy, r, t * .003 + i * .5, t * .003 + i * .5 + 1.65); ctx.stroke();
+    }
+  } else if (id === "cave") {
+    for (let i = 0; i < 8; i++) {
+      const x = wrap(i * 300 - cam.x * .08, W + 340) - 170;
+      const y = H * .16 + (i % 3) * 42;
+      ctx.strokeStyle = "rgba(90,190,255,.20)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 44, y + 125); ctx.lineTo(x + 88, y); ctx.stroke();
+    }
   }
   ctx.restore();
 }
